@@ -30,19 +30,9 @@
     </div>
   </div>
 
-  <!-- ============ build-status legend ============ -->
-  <div class="legend">
-    <span><b>Build status:</b></span>
-    <span class="tag port">PORT</span> <span>ports directly from an existing Algebra 1 module</span>
-    <span class="tag partial">PARTIAL</span> <span>partly reusable, partly new</span>
-    <span class="tag newbuild">NEW BUILD</span> <span>nothing to reuse — from scratch</span>
-    <span class="note">Section order = CRC item weight — Diagnostic weights all four strands equally (12 each)</span>
-  </div>
-
   <!-- ============ four sections ============ -->
   <div class="grid" id="sections"></div>
 
-  <div class="foot">Enter your ID to save progress across devices — same 6-digit ID as Algebra 1, its own tab on the same spreadsheet.</div>
 </div>
 
 <!-- ============ welcome / choose-mode modal ============ -->
@@ -173,24 +163,17 @@
       html += '<ul class="path">';
       skills.forEach(function(r, i){
         var st = TSIPortal.skill(r.id);
-        var soon = r.status !== 'ready';
-        var cls = 'stone' + (soon ? ' soon' : st.mastered ? ' mastered' : st.attempts ? ' started' : '');
+        var cls = 'stone' + (st.mastered ? ' mastered' : st.attempts ? ' started' : '');
         var dot = st.mastered ? '✓' : (i+1);
-        var meta = soon ? 'not built yet'
-                 : st.attempts ? st.attempts+' answered · '+Math.round(st.recentAcc*100)+'% recent'
-                 : 'not started';
-        var tag = soon ? '<span class="tagSoon">SOON</span>' : '';
-        var open = soon ? '<span class="'+cls+'" style="--accent:'+sec.accent+'">'
-                        : '<a class="'+cls+'" style="--accent:'+sec.accent+'" href="'+r.file+'">';
-        var close = soon ? '</span>' : '</a>';
+        var meta = st.attempts ? st.attempts+' answered · '+Math.round(st.recentAcc*100)+'% recent' : 'not started';
         var codeBadge = r.code ? '<span class="code">'+r.code+'</span> ' : '';
-        html += '<li>' + open +
+        html += '<li><a class="'+cls+'" style="--accent:'+sec.accent+'" href="'+r.file+'">' +
           '<span class="dot">'+dot+'</span>' +
-          '<span class="info"><span class="nm">'+codeBadge+r.name+tag+'</span>' +
+          '<span class="info"><span class="nm">'+codeBadge+r.name+'</span>' +
             '<span class="bar"><i style="width:'+Math.round(st.progress*100)+'%"></i></span>' +
             '<span class="meta">'+meta+'</span></span>' +
-          '<span class="go">'+(soon?'· · ·':'Practice')+'</span>' +
-          close + '</li>';
+          '<span class="go">Practice</span>' +
+        '</a></li>';
       });
       html += '</ul>';
 
