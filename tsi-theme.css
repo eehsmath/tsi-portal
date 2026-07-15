@@ -1,0 +1,245 @@
+/* =====================================================================
+   TSI 2.0 Portal — shared theme
+   ---------------------------------------------------------------------
+   Deliberately a different palette family from the Algebra 1 portal
+   (cool blue/violet/teal/gold, bg #eef3ff) so the two products are
+   visually distinguishable at a glance: warm cream background, rust/
+   wine/olive/teal accents. Every TSI page (index + all 4 section
+   modules) links this one file — change a color here, it's consistent
+   everywhere, instead of drifting across five separate <style> blocks.
+   ===================================================================== */
+:root{
+  --bg:#fdf6ec; --panel:#fff; --ui:#e8d7bd; --ink:#2a1f14; --muted:#8a7358;
+  --rust:#c2680c;   /* primary accent + Geometric and Spatial Reasoning */
+  --wine:#a3324a;   /* Algebraic Reasoning */
+  --olive:#5f7a3d;  /* Quantitative Reasoning */
+  --teal:#0f8b8d;   /* Probabilistic and Statistical Reasoning */
+  --ok:#0b6b2f; --err:#b21f2d;
+  --shadow:0 8px 20px rgba(80,50,20,.08);
+}
+*{box-sizing:border-box}
+html,body{min-height:100dvh}
+body{
+  margin:0; background:var(--bg); color:var(--ink); overflow:auto;
+  font-family:ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+.wrap{width:min(1240px,100%); margin:18px auto; padding:0 12px;}
+
+/* ---------- header ---------- */
+.hdr{
+  background:var(--panel); border:1px solid var(--ui); border-radius:18px;
+  box-shadow:var(--shadow); padding:18px 20px; margin-bottom:14px;
+}
+.hdr .toprow{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap}
+.hdr h1{margin:0; font-size:clamp(22px,3.4vw,30px); font-weight:900; letter-spacing:.2px}
+.hdr .sub{color:var(--muted); font-weight:700; font-size:14px; margin-top:4px}
+.switchNav{font-size:12.5px; font-weight:800; color:var(--muted); margin-top:8px}
+.switchNav a{color:var(--rust); text-decoration:none; font-weight:900}
+.switchNav a:hover{text-decoration:underline}
+
+/* ---------- identity display ---------- */
+.idBox{display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end}
+.idPill{
+  display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:999px;
+  border:1px solid var(--ui); background:#fbf3e6; font-weight:900; font-size:15px; color:var(--ink);
+}
+.idPill.guest{background:#fff8e8; border-color:#ffe38a; color:#7a5a00}
+.switchLink{
+  border:1px solid var(--ui); background:#fff; color:var(--muted);
+  font-weight:900; font-size:12.5px; border-radius:999px; padding:7px 12px; cursor:pointer;
+  font-family:inherit;
+}
+.switchLink:hover{color:var(--ink); border-color:#e0c99a}
+
+.pills{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center}
+.pill{
+  display:inline-block; padding:7px 14px; border-radius:999px; border:1px solid var(--ui);
+  background:#fff; font-weight:900; font-size:14px;
+}
+.pill b{color:var(--rust)}
+.btn{
+  height:44px; border-radius:12px; border:1px solid var(--ui); background:#fff;
+  font-weight:900; padding:0 16px; cursor:pointer; font-family:inherit; font-size:15px; color:var(--ink);
+}
+.btn.primary{border:0; background:linear-gradient(90deg,var(--rust),var(--wine)); color:#fff7ee}
+.btn.info{border:0; background:linear-gradient(90deg,#f3ddb9,#e6b880); color:#3a2205}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.55; cursor:default}
+.btn:focus-visible, input:focus-visible{outline:3px solid #f0a83c; outline-offset:2px}
+
+/* ---------- legend (build-status key, index page only) ---------- */
+.legend{
+  display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  background:var(--panel); border:1px solid var(--ui); border-radius:14px;
+  box-shadow:var(--shadow); padding:12px 16px; margin-bottom:14px;
+  font-size:12.5px; font-weight:800; color:var(--muted);
+}
+.legend b{color:var(--ink)}
+.tag{font-size:10px; font-weight:900; letter-spacing:.5px; border-radius:999px; padding:2px 9px}
+.tag.port{color:#0b3f8f; background:#e6efff; border:1px solid #bcd0ff}
+.tag.partial{color:#7a5a00; background:#fff8e0; border:1px solid #ffe38a}
+.tag.newbuild{color:var(--muted); background:#f7efe2; border:1px solid var(--ui)}
+.legend .note{margin-left:auto; font-weight:700}
+
+/* ---------- section grid (index page) ---------- */
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media (max-width:900px){ .grid{grid-template-columns:1fr} }
+
+.sec{
+  background:var(--panel); border:1px solid var(--ui); border-radius:18px;
+  box-shadow:var(--shadow); padding:16px; display:flex; flex-direction:column;
+  border-top:5px solid var(--accent);
+}
+.sec .head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px}
+.sec .eyebrow{font-size:12px; font-weight:900; letter-spacing:.8px; color:var(--muted); text-transform:uppercase}
+.sec h2{margin:2px 0 0; font-size:20px; font-weight:900}
+.sec .mcount{font-size:12px; font-weight:800; color:var(--muted); margin-top:3px}
+
+.ring{width:64px; height:64px; flex:none}
+.ring svg{width:64px; height:64px; transform:rotate(-90deg)}
+.ring .track{fill:none; stroke:#f6ead8; stroke-width:8}
+.ring .fill{fill:none; stroke:var(--accent); stroke-width:8; stroke-linecap:round; transition:stroke-dashoffset .6s ease}
+.ring .pct{position:relative; top:-64px; height:64px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px}
+
+/* ---------- stepping-stone path ---------- */
+.path{list-style:none; margin:10px 0 0; padding:0; position:relative}
+.path::before{content:""; position:absolute; left:19px; top:14px; bottom:14px; width:0; border-left:3px dotted #ecdcc0}
+.stone{position:relative; display:flex; align-items:center; gap:12px; padding:7px 8px 7px 0; border-radius:12px; text-decoration:none; color:inherit}
+a.stone:hover{background:#fbf3e6}
+.stone .dot{
+  width:40px; height:40px; flex:none; border-radius:50%;
+  border:3px solid #ecdcc0; background:#fff; z-index:1;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:900; font-size:15px; color:var(--muted);
+  transition:background .3s, border-color .3s, color .3s;
+}
+.stone.started .dot{border-color:var(--accent); color:var(--ink)}
+.stone.mastered .dot{background:var(--accent); border-color:var(--accent); color:#fff}
+.stone .info{flex:1; min-width:0}
+.stone .nm{font-weight:800; font-size:13.5px; line-height:1.4}
+.stone .code{display:inline-block; font-weight:900; font-size:12px; color:var(--accent);
+  background:#fbeedd; border:1px solid var(--ui); border-radius:6px; padding:1px 7px; margin-right:6px; vertical-align:1px}
+.stone .bar{height:6px; border-radius:999px; background:#f6ead8; margin-top:5px; overflow:hidden; max-width:260px}
+.stone .bar i{display:block; height:100%; border-radius:999px; background:var(--accent); transition:width .5s ease}
+.stone .meta{font-size:11.5px; font-weight:800; color:var(--muted); margin-top:3px}
+.stone .go{flex:none; font-weight:900; color:var(--accent); font-size:14px; padding:6px 12px; border-radius:999px; border:1px solid var(--ui); background:#fff}
+.stone.soon{opacity:.45; pointer-events:none}
+.stone.soon .go{color:var(--muted)}
+.tagSoon{font-size:10px; font-weight:900; letter-spacing:.6px; color:var(--muted);
+  border:1px solid var(--ui); border-radius:999px; padding:2px 8px; margin-left:6px; vertical-align:2px}
+
+/* ---------- modals (intro, report, more) ---------- */
+.modal{position:fixed; inset:0; background:rgba(15,23,42,.45); display:none; z-index:30;
+  align-items:flex-start; justify-content:center; overflow:auto; padding:20px}
+.modal.show{display:flex}
+.modalCard{margin:24px 0; width:min(860px,96vw); background:#fff; border:1px solid var(--ui);
+  border-radius:24px; box-shadow:0 40px 80px rgba(40,20,5,.25)}
+.modalHead{display:flex; justify-content:space-between; align-items:center; gap:10px;
+  padding:16px 20px; border-bottom:1px dashed #ece0cc}
+.modalHead h3{margin:0; font-size:20px; font-weight:900}
+.modalBody{padding:18px 20px}
+table{width:100%; border-collapse:collapse; font-size:14px}
+th{text-align:left; font-size:11px; letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
+  padding:8px 10px; border-bottom:2px solid #f6ead8}
+td{padding:9px 10px; border-bottom:1px solid #f8f1e4; font-weight:800}
+td.num{font-variant-numeric:tabular-nums}
+.chip-ok{color:var(--ok); background:#eafff2; border:1px solid #bfeacc; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900}
+.chip-prog{color:#7a5a00; background:#fff9d6; border:1px solid #ffe38a; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900}
+.chip-none{color:var(--muted); background:#f7efe2; border:1px solid var(--ui); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900}
+tr.std-row td{background:#fbf3e6}
+tr.std-row td:first-child{border-left:3px solid var(--rust)}
+tr.se-row td{padding-top:5px; padding-bottom:5px; font-size:12.5px; color:var(--muted); border-bottom:1px dashed #f8f1e4}
+tr.se-row td.se-label{padding-left:32px; font-weight:800; color:var(--ink)}
+tr.se-row td.num{color:var(--ink)}
+#reportModal[data-view="summary"] tr.se-row{display:none}
+.viewSwitch{display:inline-flex; gap:4px; padding:4px; background:#fdf6ec; border:1px solid var(--ui);
+  border-radius:12px; margin-bottom:6px}
+.viewBtn{border:0; background:transparent; font-family:inherit; font-weight:900; font-size:13px;
+  color:var(--muted); padding:7px 14px; border-radius:8px; cursor:pointer}
+.viewBtn:hover{color:var(--ink)}
+.viewBtn.is-active{background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(80,50,20,.1)}
+.viewCaption{color:var(--muted); font-size:12.5px; font-weight:700; margin:0 0 10px}
+td.num.muted, td.muted{color:var(--muted); font-weight:700}
+.codeBox{margin-top:14px; display:flex; gap:8px; align-items:stretch}
+.codeBox textarea{flex:1; min-height:64px; border:2px solid var(--ui); border-radius:12px; padding:10px;
+  font:800 12px/1.5 ui-monospace, Menlo, Consolas, monospace; color:var(--ink); resize:vertical}
+.foot{color:var(--muted); font-size:12.5px; font-weight:700; margin-top:14px; text-align:center}
+
+.moreCard{width:min(640px,96vw)}
+.moreList{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
+.moreItem{display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--ui);
+  border-radius:14px; text-decoration:none; color:inherit; background:#fdf8f0}
+.moreItem:hover{background:#f7ead9; border-color:#e0c99a}
+.moreItem .glyph{width:42px; height:42px; flex:none; border-radius:12px; background:#fbeedd;
+  display:flex; align-items:center; justify-content:center; font-weight:900; font-size:17px; color:var(--rust)}
+.moreItem .info{flex:1; min-width:0}
+.moreItem .nm{font-weight:900; font-size:15px}
+.moreItem .ds{color:var(--muted); font-weight:700; font-size:12.5px; margin-top:2px}
+.moreItem .go{flex:none; font-weight:900; color:var(--rust); font-size:13px}
+.moreSectionHead{font-size:12px; font-weight:900; letter-spacing:.8px; text-transform:uppercase;
+  color:var(--muted); padding:10px 2px 2px; border-top:1px dashed var(--ui); margin-top:4px}
+.moreSectionHead:first-child{border-top:0; margin-top:0; padding-top:0}
+
+/* ---------- welcome / choose-mode modal ---------- */
+.chooseCard{width:min(520px,96vw)}
+.chooseBody{padding:20px}
+.chooseBody p.lead{margin:0 0 16px; color:var(--muted); font-weight:700; font-size:14.5px}
+.modeBlock{border:2px solid var(--ui); border-radius:16px; padding:16px; margin-bottom:0; background:#fdf8f0}
+.modeBlock h4{margin:0 0 4px; font-size:16px; font-weight:900}
+.modeBlock .hint{color:var(--muted); font-weight:700; font-size:13px; margin:0 0 12px}
+.modeBlock-id{border-color:#e6c78f; background:#fbf3e6}
+.modeBlock-guest{border-color:#ffdb8a; background:#fffaf0}
+.modeBlock-guest h4{color:#8a5b00}
+.guest-btn{border-color:#ffdb8a; background:#fff3d6; color:#7a5100}
+.guest-btn:hover{background:#ffe9b3}
+.orDivider{display:flex; align-items:center; gap:12px; margin:16px 0; color:var(--muted)}
+.orDivider::before, .orDivider::after{content:""; flex:1; height:2px; background:var(--ui)}
+.orDivider span{font-weight:900; font-size:13px; letter-spacing:1.5px; color:var(--muted)}
+.warnline{color:#7a5a00; background:#fff8e8; border:1px solid #ffe38a; border-radius:10px;
+  padding:8px 12px; font-weight:800; font-size:12.5px; margin-top:10px}
+.idRow{display:flex; gap:8px; align-items:stretch; margin-top:4px}
+.idRow input{flex:1; height:46px; border:2px solid var(--ui); border-radius:12px; padding:0 14px;
+  font-weight:900; font-size:18px; letter-spacing:2px; font-family:inherit; color:var(--ink)}
+.msg{min-height:18px; margin-top:8px; font-weight:800; font-size:13px}
+.msg.err{color:var(--err)}
+.msg.busy{color:var(--muted)}
+.foot-note{color:var(--muted); font-size:12px; font-weight:700; margin-top:6px; line-height:1.5}
+
+/* ---------- module (practice) page shell — used by apps/tsi-*.html ---------- */
+.modHdr{background:var(--panel); border:1px solid var(--ui); border-radius:18px; box-shadow:var(--shadow);
+  padding:16px 20px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;
+  gap:14px; flex-wrap:wrap; border-top:5px solid var(--accent)}
+.modHdr .back{font-size:12.5px; font-weight:800; color:var(--muted); text-decoration:none}
+.modHdr .back:hover{color:var(--ink)}
+.modHdr h1{margin:4px 0 0; font-size:clamp(20px,3vw,26px); font-weight:900}
+.modTabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
+.modTab{border:1px solid var(--ui); background:#fff; border-radius:999px; padding:8px 14px;
+  font-weight:900; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit}
+.modTab.active{background:var(--accent); border-color:var(--accent); color:#fff}
+.modCard{background:var(--panel); border:1px solid var(--ui); border-radius:18px; box-shadow:var(--shadow); padding:20px}
+.modCard .seCode{display:inline-block; font-weight:900; font-size:12px; color:var(--accent);
+  background:#fbeedd; border:1px solid var(--ui); border-radius:6px; padding:2px 8px; margin-bottom:8px}
+.modCard .seName{font-weight:800; font-size:15px; margin-bottom:14px}
+.promptArea{background:#fdf8f0; border:1px dashed var(--ui); border-radius:14px; padding:16px; margin-bottom:14px; min-height:60px}
+.answerArea{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
+.answerArea input{height:44px; border:2px solid var(--ui); border-radius:12px; padding:0 14px;
+  font-weight:800; font-size:16px; font-family:inherit; color:var(--ink); min-width:120px}
+.actionRow{display:flex; gap:8px; flex-wrap:wrap}
+.hintPanel{margin-top:14px; padding:14px; background:#fbf3e6; border-radius:14px; border:1px dashed var(--ui);
+  font-size:13.5px; font-weight:700; color:var(--muted); display:none}
+.hintPanel.show{display:block}
+.stub{color:var(--muted); font-style:italic; font-weight:700; font-size:13.5px}
+
+@media print{
+  body > .wrap{display:none}
+  #introModal{display:none !important}
+  #reportModal{position:static !important; padding:0 !important; background:none !important;
+    display:block !important; overflow:visible !important; inset:auto !important}
+  #reportModal .modalCard{box-shadow:none !important; border:0 !important; margin:0 !important; width:100% !important}
+  .noprint{display:none !important}
+  tr.std-row, tr.se-row{page-break-inside:avoid; break-inside:avoid}
+}
+@media (max-width:520px){
+  .stone .bar{max-width:150px}
+  .idBox{justify-content:flex-start}
+}

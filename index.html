@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TSI 2.0 Math Practice Portal — EEHS Math</title>
+<link rel="stylesheet" href="tsi-theme.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ header ============ -->
+  <div class="hdr">
+    <div class="toprow">
+      <div>
+        <h1>TSI 2.0 Math Practice Portal</h1>
+        <div class="sub">Practice by strand — the same four categories TSIA2 actually scores.</div>
+        <div class="switchNav">Switch portal: <a href="../index.html">Algebra 1</a> · <b>TSI 2.0</b></div>
+      </div>
+      <div class="idBox" id="idBox"></div>
+    </div>
+    <div class="pills">
+      <span class="pill">Answered <b id="tAttempts">0</b></span>
+      <span class="pill">Accuracy <b id="tAcc">—</b></span>
+      <span class="pill">Standards polished <b id="tMastered">0</b></span>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="continueBtn">Continue my path →</button>
+      <button class="btn info" id="reportBtn">My report</button>
+      <button class="btn" id="moreBtn">More practice</button>
+    </div>
+  </div>
+
+  <!-- ============ build-status legend ============ -->
+  <div class="legend">
+    <span><b>Build status:</b></span>
+    <span class="tag port">PORT</span> <span>ports directly from an existing Algebra 1 module</span>
+    <span class="tag partial">PARTIAL</span> <span>partly reusable, partly new</span>
+    <span class="tag newbuild">NEW BUILD</span> <span>nothing to reuse — from scratch</span>
+    <span class="note">Section order = CRC item weight — Diagnostic weights all four strands equally (12 each)</span>
+  </div>
+
+  <!-- ============ four sections ============ -->
+  <div class="grid" id="sections"></div>
+
+  <div class="foot">Enter your ID to save progress across devices — same 6-digit ID as Algebra 1, its own tab on the same spreadsheet.</div>
+</div>
+
+<!-- ============ welcome / choose-mode modal ============ -->
+<div class="modal" id="introModal" role="dialog" aria-modal="true" aria-label="Choose how to work">
+  <div class="modalCard chooseCard">
+    <div class="modalHead"><h3>Welcome to TSI 2.0 Practice</h3></div>
+    <div class="chooseBody">
+      <p class="lead">How do you want to work today?</p>
+
+      <div class="modeBlock modeBlock-id">
+        <h4>Enter ID to Save Progress</h4>
+        <p class="hint">Use your ID to save and restore your progress.</p>
+        <div class="idRow">
+          <input id="idInput" inputmode="numeric" autocomplete="off" maxlength="6"
+                 placeholder="6-digit ID" aria-label="Your 6-digit ID" />
+          <button class="btn primary" id="idBtn">Start</button>
+        </div>
+        <div class="msg" id="idMsg" aria-live="polite"></div>
+      </div>
+
+      <div class="orDivider" role="separator"><span>OR</span></div>
+
+      <div class="modeBlock modeBlock-guest">
+        <h4>Guest Mode</h4>
+        <p class="hint">Just here to practice? Jump straight in.</p>
+        <button class="btn guest-btn" id="guestBtn">Continue as guest</button>
+        <div class="warnline">Your progress won't be saved after this session.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ report modal ============ -->
+<div class="modal" id="reportModal" role="dialog" aria-modal="true" aria-label="Progress report">
+  <div class="modalCard">
+    <div class="modalHead">
+      <h3>Progress Report <span id="repName" style="color:var(--muted); font-size:15px"></span></h3>
+      <div class="noprint" style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="btn" id="csvBtn">Download CSV</button>
+        <button class="btn" id="printBtn">Print</button>
+        <button class="btn" id="closeReport">Close</button>
+      </div>
+    </div>
+    <div class="modalBody">
+      <div class="viewSwitch noprint" role="tablist" aria-label="Report view">
+        <button class="viewBtn is-active" data-view="summary" role="tab">Summary</button>
+        <button class="viewBtn" data-view="detail" role="tab">Detail</button>
+      </div>
+      <div class="viewCaption" id="viewCaption"></div>
+      <table>
+        <thead id="repHead"></thead>
+        <tbody id="repRows"></tbody>
+      </table>
+      <div class="codeBox noprint">
+        <div style="flex:1">
+          <div style="font-size:11px; font-weight:900; letter-spacing:.5px; color:var(--muted); text-transform:uppercase; margin-bottom:5px">
+            Backup only — progress already saves automatically to your ID
+          </div>
+          <textarea id="repCode" readonly aria-label="Backup code"></textarea>
+        </div>
+        <button class="btn info" id="copyCode">Copy code</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ more practice modal ============ -->
+<div class="modal" id="moreModal" role="dialog" aria-modal="true" aria-label="More practice apps">
+  <div class="modalCard moreCard">
+    <div class="modalHead">
+      <h3>More Practice</h3>
+      <div class="noprint"><button class="btn" id="closeMore">Close</button></div>
+    </div>
+    <div class="modalBody">
+      <p class="lead" style="margin:0 0 14px; color:var(--muted); font-weight:700; font-size:14px">
+        Extra practice apps that don't connect to your saved progress — just for additional practice.
+      </p>
+      <ul class="moreList" id="moreList"></ul>
+    </div>
+  </div>
+</div>
+
+<script src="portal-tsi.js"></script>
+<script>
+(function(){
+  'use strict';
+  var $ = function(s){ return document.querySelector(s); };
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  /* ---------- LEGACY APPS ----------
+     Nothing here yet — the legacy proportions/percent app mentioned for
+     QR.1/QR.5/QR.6 goes here once shared. Same shape as the Algebra 1
+     portal's LEGACY_APPS: { name, desc, file, group: 'skill'|'drill' }. */
+  var LEGACY_APPS = [];
+
+  /* ---------- build the four section cards ---------- */
+  function ringSVG(pct, accent){
+    var r = 26, C = 2*Math.PI*r, off = C*(1-pct);
+    return '<div class="ring" style="--accent:'+accent+'">' +
+      '<svg viewBox="0 0 64 64" aria-hidden="true">' +
+        '<circle class="track" cx="32" cy="32" r="'+r+'"></circle>' +
+        '<circle class="fill" cx="32" cy="32" r="'+r+'" stroke-dasharray="'+C+'" stroke-dashoffset="'+off+'"></circle>' +
+      '</svg>' +
+      '<div class="pct">'+Math.round(pct*100)+'%</div></div>';
+  }
+
+  function render(){
+    var host = $('#sections');
+    host.innerHTML = '';
+    var sum = TSIPortal.summary();
+
+    TSIPortal.SECTIONS.forEach(function(sec, si){
+      var skills = TSIPortal.REGISTRY.filter(function(r){ return r.sec === sec.id; });
+      var s = sum[sec.id];
+
+      var card = document.createElement('div');
+      card.className = 'sec';
+      card.style.setProperty('--accent', sec.accent);
+
+      var html =
+        '<div class="head"><div>' +
+          '<div class="eyebrow">Section '+(si+1)+' · '+sec.note+'</div>' +
+          '<h2>'+sec.name+'</h2>' +
+          '<div class="mcount">'+s.mastered+' of '+s.readyCount+' standards polished</div>' +
+        '</div>' + ringSVG(s.progress, sec.accent) + '</div>';
+
+      html += '<ul class="path">';
+      skills.forEach(function(r, i){
+        var st = TSIPortal.skill(r.id);
+        var soon = r.status !== 'ready';
+        var cls = 'stone' + (soon ? ' soon' : st.mastered ? ' mastered' : st.attempts ? ' started' : '');
+        var dot = st.mastered ? '✓' : (i+1);
+        var meta = soon ? 'not built yet'
+                 : st.attempts ? st.attempts+' answered · '+Math.round(st.recentAcc*100)+'% recent'
+                 : 'not started';
+        var tag = soon ? '<span class="tagSoon">SOON</span>' : '';
+        var open = soon ? '<span class="'+cls+'" style="--accent:'+sec.accent+'">'
+                        : '<a class="'+cls+'" style="--accent:'+sec.accent+'" href="'+r.file+'">';
+        var close = soon ? '</span>' : '</a>';
+        var codeBadge = r.code ? '<span class="code">'+r.code+'</span> ' : '';
+        html += '<li>' + open +
+          '<span class="dot">'+dot+'</span>' +
+          '<span class="info"><span class="nm">'+codeBadge+r.name+tag+'</span>' +
+            '<span class="bar"><i style="width:'+Math.round(st.progress*100)+'%"></i></span>' +
+            '<span class="meta">'+meta+'</span></span>' +
+          '<span class="go">'+(soon?'· · ·':'Practice')+'</span>' +
+          close + '</li>';
+      });
+      html += '</ul>';
+
+      card.innerHTML = html;
+      host.appendChild(card);
+    });
+
+    var t = TSIPortal.totals();
+    $('#tAttempts').textContent = t.attempts;
+    $('#tAcc').textContent = t.attempts ? Math.round(100*t.correct/t.attempts)+'%' : '—';
+    $('#tMastered').textContent = t.mastered;
+  }
+
+  /* ---------- identity display (header) ---------- */
+  function updateIdentity(){
+    var box = $('#idBox');
+    var mode = TSIPortal.mode();
+    if (mode === 'student'){
+      var name = TSIPortal.studentName();
+      var greet = name ? ('Welcome back, ' + esc(name) + '!')
+                       : ('Tracking ID ' + esc(TSIPortal.studentId()));
+      box.innerHTML = '<span class="idPill">'+greet+'</span>' +
+                      '<button class="switchLink" id="switchIdBtn">Switch ID</button>';
+      $('#switchIdBtn').addEventListener('click', doSwitch);
+    } else if (mode === 'guest'){
+      box.innerHTML = '<span class="idPill guest">Guest mode · progress won\u2019t be saved</span>' +
+                      '<button class="switchLink" id="saveProgBtn">Save progress</button>';
+      $('#saveProgBtn').addEventListener('click', openIntro);
+    } else {
+      box.innerHTML = '';
+    }
+  }
+
+  /* ---------- welcome / choose-mode modal ---------- */
+  function openIntro(){
+    $('#idMsg').textContent = '';
+    $('#idMsg').className = 'msg';
+    $('#idInput').value = '';
+    $('#idBtn').disabled = false;
+    $('#introModal').classList.add('show');
+    setTimeout(function(){ $('#idInput').focus(); }, 30);
+  }
+  function hideIntro(){ $('#introModal').classList.remove('show'); }
+
+  $('#idInput').addEventListener('input', function(){
+    this.value = this.value.replace(/\D/g,'').slice(0,6);
+  });
+
+  function submitId(){
+    var v = ($('#idInput').value || '').trim();
+    var msg = $('#idMsg');
+    if (!TSIPortal.validId(v)){
+      msg.textContent = 'Please enter your 6-digit ID (numbers only).';
+      msg.className = 'msg err';
+      return;
+    }
+    $('#idBtn').disabled = true;
+    msg.textContent = 'Checking…';
+    msg.className = 'msg busy';
+    TSIPortal.identify(v, function(ok, err){
+      if (ok){
+        hideIntro();
+        updateIdentity();
+        render();
+      } else {
+        msg.textContent = err || 'Something went wrong. Please try again.';
+        msg.className = 'msg err';
+        $('#idBtn').disabled = false;
+      }
+    });
+  }
+  $('#idBtn').addEventListener('click', submitId);
+  $('#idInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') submitId(); });
+
+  $('#guestBtn').addEventListener('click', function(){
+    TSIPortal.startGuest();
+    hideIntro();
+    updateIdentity();
+    render();
+  });
+
+  function doSwitch(){
+    if (!confirm('Switch ID? This clears the progress saved on THIS device so you can enter a different ID. Your saved work for your own ID is safe and comes back when you re-enter it.')) return;
+    TSIPortal.switchId();
+    updateIdentity();
+    render();
+    openIntro();
+  }
+
+  /* ---------- continue my path ---------- */
+  $('#continueBtn').addEventListener('click', function(){
+    var next = TSIPortal.nextOnPath();
+    if(next){ location.href = next.file; }
+  });
+
+  /* ---------- report ---------- */
+  function statusChip(st){
+    if (!st.attempts) return '<span class="chip-none">Not started</span>';
+    if (st.mastered)  return '<span class="chip-ok">Polished ✓</span>';
+    return '<span class="chip-prog">In progress</span>';
+  }
+  function fmtDate(ms){
+    if (!ms) return '—';
+    var d = new Date(ms), y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'),
+        day = String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  }
+  function pct(x){ return Math.round(x*100)+'%'; }
+
+  var VIEW_CAPTIONS = {
+    summary: 'Per-standard roll-up. One row per TSI standard the student has practiced.',
+    detail:  'Full breakdown by standard: hints used, level, and attempts to mastery.'
+  };
+
+  function headHTML(view){
+    if (view === 'detail'){
+      return '<tr>'+
+        '<th>Skill</th>'+
+        '<th>Total Attempts</th><th>Total Correct</th><th>Overall</th>'+
+        '<th>Recent 10</th><th>Hints</th><th>Level</th>'+
+        '<th>Att. to Mastery</th><th>Last Active</th><th>Status</th></tr>';
+    }
+    return '<tr>'+
+      '<th>Skill</th><th>Total Attempts</th><th>Total Correct</th>'+
+      '<th>Overall</th><th>Recent 10</th><th>Last Active</th><th>Status</th></tr>';
+  }
+
+  function rowHTML(view, kind, label, st){
+    var cls = (kind === 'std') ? 'std-row' : 'se-row';
+    var labelCell = (kind === 'std')
+      ? '<td>'+label+'</td>'
+      : '<td class="se-label">'+label+'</td>';
+    var overall = st.attempts ? pct(st.correct/st.attempts) : '—';
+    var recent  = st.attempts ? pct(st.recentAcc) : '—';
+    var last    = fmtDate(st.last);
+    if (view === 'detail'){
+      var atm = (st.attemptsToMastery != null) ? st.attemptsToMastery : '—';
+      var lv  = st.level || 1;
+      var hints = st.hints || 0;
+      return '<tr class="'+cls+'">'+labelCell+
+        '<td class="num">'+st.attempts+'</td>'+
+        '<td class="num">'+(st.attempts ? st.correct : '—')+'</td>'+
+        '<td class="num">'+overall+'</td>'+
+        '<td class="num">'+recent+'</td>'+
+        '<td class="num">'+hints+'</td>'+
+        '<td class="num">'+lv+'</td>'+
+        '<td class="num">'+atm+'</td>'+
+        '<td class="num muted">'+last+'</td>'+
+        '<td>'+statusChip(st)+'</td></tr>';
+    }
+    return '<tr class="'+cls+'">'+labelCell+
+      '<td class="num">'+st.attempts+'</td>'+
+      '<td class="num">'+(st.attempts ? st.correct : '—')+'</td>'+
+      '<td class="num">'+overall+'</td>'+
+      '<td class="num">'+recent+'</td>'+
+      '<td class="num muted">'+last+'</td>'+
+      '<td>'+statusChip(st)+'</td></tr>';
+  }
+
+  function colspan(view){ return view === 'detail' ? 10 : 7; }
+
+  function renderReport(view){
+    $('#reportModal').setAttribute('data-view', view);
+    $('#viewCaption').textContent = VIEW_CAPTIONS[view] || '';
+    $('#repHead').innerHTML = headHTML(view);
+    var btns = document.querySelectorAll('.viewBtn');
+    for (var i = 0; i < btns.length; i++){
+      btns[i].classList.toggle('is-active', btns[i].getAttribute('data-view') === view);
+    }
+    var rows = '';
+    TSIPortal.REGISTRY.forEach(function(r){
+      var st = TSIPortal.skill(r.id);
+      if (!st.attempts) return;
+      var label = (r.code ? '<b>'+r.code+'</b> ' : '') + r.name;
+      rows += rowHTML(view, 'std', label, st);
+      if (r.modules && r.modules.length){
+        r.modules.forEach(function(mid){
+          rows += rowHTML(view, 'se', mid, TSIPortal.skill(mid));
+        });
+      }
+    });
+    if (!rows){
+      rows = '<tr><td colspan="'+colspan(view)+'" style="color:var(--muted)">'+
+        'No practice recorded yet — go answer some questions!</td></tr>';
+    }
+    $('#repRows').innerHTML = rows;
+  }
+
+  function csvEscape(v){
+    var s = (v == null) ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function buildStudentCSV(){
+    var idText = TSIPortal.studentId() || 'guest';
+    var nameText = TSIPortal.studentName() || '';
+    var headers = ['id','name','level','skill_kind','skill_id','skill_name',
+      'total_attempts','total_correct','overall_accuracy','recent_10_accuracy',
+      'hints','current_level','attempts_to_mastery','last_active','status'];
+    var lines = [headers.map(csvEscape).join(',')];
+    function statusText(st){
+      if (!st.attempts) return 'Not started';
+      return st.mastered ? 'Polished' : 'In progress';
+    }
+    TSIPortal.REGISTRY.forEach(function(r){
+      var st = TSIPortal.skill(r.id);
+      lines.push([
+        idText, nameText, 'standard', 'standard', r.id, r.name,
+        st.attempts, st.attempts?st.correct:'',
+        st.attempts?(st.correct/st.attempts).toFixed(4):'',
+        st.attempts?st.recentAcc.toFixed(4):'',
+        st.hints||0, st.level||1,
+        (st.attemptsToMastery != null ? st.attemptsToMastery : ''),
+        fmtDate(st.last), statusText(st)
+      ].map(csvEscape).join(','));
+      if (r.modules && r.modules.length){
+        r.modules.forEach(function(mid){
+          var mst = TSIPortal.skill(mid);
+          lines.push([
+            idText, nameText, 'standard', 'se', mid, '',
+            mst.attempts, mst.attempts?mst.correct:'',
+            mst.attempts?(mst.correct/mst.attempts).toFixed(4):'',
+            mst.attempts?mst.recentAcc.toFixed(4):'',
+            mst.hints||0, mst.level||1,
+            (mst.attemptsToMastery != null ? mst.attemptsToMastery : ''),
+            fmtDate(mst.last), statusText(mst)
+          ].map(csvEscape).join(','));
+        });
+      }
+    });
+    return lines.join('\n');
+  }
+  function downloadStudentCSV(){
+    var csv = buildStudentCSV();
+    var idText = TSIPortal.studentId() || 'guest';
+    var when = fmtDate(Date.now());
+    var fname = 'tsi2_' + idText + '_' + when + '.csv';
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 500);
+  }
+
+  var _view = 'summary';
+  function openReport(){
+    $('#repName').textContent = TSIPortal.studentName() ? '· '+TSIPortal.studentName() : '';
+    $('#repCode').value = TSIPortal.reportCode();
+    renderReport(_view);
+    $('#reportModal').classList.add('show');
+  }
+  $('#reportBtn').addEventListener('click', openReport);
+  $('#closeReport').addEventListener('click', function(){ $('#reportModal').classList.remove('show'); });
+  $('#reportModal').addEventListener('click', function(e){ if(e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
+  document.querySelectorAll('.viewBtn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      _view = btn.getAttribute('data-view');
+      renderReport(_view);
+    });
+  });
+  $('#printBtn').addEventListener('click', function(){ window.print(); });
+  $('#csvBtn').addEventListener('click', downloadStudentCSV);
+
+  /* ---------- more practice ---------- */
+  var GROUP_LABELS = { skill: 'Skills', drill: 'Drills' };
+  var GROUP_ORDER = ['skill', 'drill'];
+
+  function itemHTML(app, i){
+    return '<li><a class="moreItem" href="'+esc(app.file)+'" target="_blank" rel="noopener">'+
+      '<span class="glyph">'+(i+1)+'</span>'+
+      '<span class="info"><span class="nm">'+esc(app.name)+'</span>'+
+        '<span class="ds">'+esc(app.desc||'')+'</span></span>'+
+      '<span class="go">Open →</span>'+
+    '</a></li>';
+  }
+  function renderMore(){
+    var host = $('#moreList');
+    if (!LEGACY_APPS.length){
+      host.innerHTML = '<li style="color:var(--muted); font-weight:700; font-size:13.5px">'+
+        'No apps listed yet — add entries to LEGACY_APPS in index.html.</li>';
+      return;
+    }
+    var html = '';
+    var counter = 0;
+    GROUP_ORDER.forEach(function(key){
+      var apps = LEGACY_APPS.filter(function(a){ return a.group === key; });
+      if (!apps.length) return;
+      html += '<li class="moreSectionHead">'+esc(GROUP_LABELS[key] || key)+'</li>';
+      html += apps.map(function(app){ counter++; return itemHTML(app, counter - 1); }).join('');
+    });
+    host.innerHTML = html;
+  }
+  $('#moreBtn').addEventListener('click', function(){
+    renderMore();
+    $('#moreModal').classList.add('show');
+  });
+  $('#closeMore').addEventListener('click', function(){ $('#moreModal').classList.remove('show'); });
+  $('#moreModal').addEventListener('click', function(e){ if(e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
+  $('#copyCode').addEventListener('click', function(){
+    var ta = $('#repCode'); ta.select();
+    try{ navigator.clipboard.writeText(ta.value); }catch(e){ document.execCommand('copy'); }
+    $('#copyCode').textContent = 'Copied ✓';
+    setTimeout(function(){ $('#copyCode').textContent = 'Copy code'; }, 1500);
+  });
+
+  /* ---------- init ---------- */
+  function init(){
+    var mode = TSIPortal.mode();
+    updateIdentity();
+    render();
+    if (mode === 'none'){
+      openIntro();
+    } else if (mode === 'student'){
+      TSIPortal.refresh(function(ok){
+        if (ok){ updateIdentity(); render(); }
+      });
+    }
+  }
+
+  window.addEventListener('pageshow', function(){ updateIdentity(); render(); });
+  init();
+})();
+</script>
+</body>
+</html>
