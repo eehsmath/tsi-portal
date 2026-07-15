@@ -167,7 +167,7 @@
         var dot = st.mastered ? '✓' : (i+1);
         var meta = st.attempts ? st.attempts+' answered · '+Math.round(st.recentAcc*100)+'% recent' : 'not started';
         var codeBadge = r.code ? '<span class="code">'+r.code+'</span> ' : '';
-        html += '<li><a class="'+cls+'" style="--accent:'+sec.accent+'" href="'+r.file+'">' +
+        html += '<li><a class="'+cls+'" style="--accent:'+sec.accent+'" href="'+r.file+'?std='+r.id+'">' +
           '<span class="dot">'+dot+'</span>' +
           '<span class="info"><span class="nm">'+codeBadge+r.name+'</span>' +
             '<span class="bar"><i style="width:'+Math.round(st.progress*100)+'%"></i></span>' +
