@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quantitative Reasoning — TSI 2.0 Practice</title>
+<link rel="stylesheet" href="../tsi-theme.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="modHdr" style="--accent:#5f7a3d">
+    <div>
+      <a class="back" href="../index.html">← Back to TSI hub</a>
+      <h1>Quantitative Reasoning</h1>
+    </div>
+    <span class="pill">Standard <b id="curCode">—</b></span>
+  </div>
+
+  <div class="modTabs" id="tabs"></div>
+
+  <div class="modCard" id="card"></div>
+
+</div>
+
+<script src="../portal-tsi.js"></script>
+<script>
+(function(){
+  'use strict';
+  var $ = function(s){ return document.querySelector(s); };
+  var SECTION_ID = 'quant';
+
+  /* See apps/tsi-ar.html for the STUBS shape and extension pattern. */
+  var STUBS = {
+    // 'QR.7': { gen: function(){...}, prompt: function(p){...},
+    //           check: function(p, ans){...}, steps: function(p){...} }
+  };
+
+  var STANDARDS = TSIPortal.REGISTRY.filter(function(r){ return r.sec === SECTION_ID; });
+  var cur = 0;
+
+  function renderTabs(){
+    var host = $('#tabs');
+    host.innerHTML = STANDARDS.map(function(r, i){
+      return '<button class="modTab'+(i===cur?' active':'')+'" data-i="'+i+'">'+r.code+'</button>';
+    }).join('');
+    host.querySelectorAll('.modTab').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        cur = +btn.getAttribute('data-i');
+        renderTabs();
+        renderCard();
+      });
+    });
+  }
+
+  function renderCard(){
+    var r = STANDARDS[cur];
+    $('#curCode').textContent = r.code;
+    var stub = STUBS[r.id];
+    var reuseNote = r.reuse ? '<div class="stub" style="margin-top:10px">Build note — reuse: '+r.reuse+'</div>' : '';
+
+    if (!stub){
+      $('#card').innerHTML =
+        '<span class="seCode">'+r.code+'</span>' +
+        '<div class="seName">'+r.name+'</div>' +
+        '<div class="promptArea"><span class="stub">Question generator not built yet for '+r.code+'.</span></div>' +
+        '<div class="answerArea"><input placeholder="answer" disabled></div>' +
+        '<div class="actionRow">' +
+          '<button class="btn primary" disabled>Check</button>' +
+          '<button class="btn" id="hintBtn" disabled>Hint</button>' +
+        '</div>' +
+        reuseNote;
+      return;
+    }
+
+    var p = stub.gen();
+    $('#card').innerHTML =
+      '<span class="seCode">'+r.code+'</span>' +
+      '<div class="seName">'+r.name+'</div>' +
+      '<div class="promptArea" id="promptArea">'+stub.prompt(p)+'</div>' +
+      '<div class="actionRow">' +
+        '<button class="btn primary" id="checkBtn">Check</button>' +
+        '<button class="btn" id="hintBtn">Hint</button>' +
+      '</div>' +
+      '<div class="hintPanel" id="hintPanel"></div>';
+
+    $('#checkBtn').addEventListener('click', function(){
+      var ans = $('#promptArea').querySelector('input') ? $('#promptArea').querySelector('input').value : '';
+      var correct = stub.check(p, ans);
+      TSIPortal.record(r.id, correct, { level: 1 });
+      renderCard();
+    });
+    $('#hintBtn').addEventListener('click', function(){
+      TSIPortal.hint(r.id);
+      var panel = $('#hintPanel');
+      panel.innerHTML = stub.steps(p);
+      panel.classList.add('show');
+    });
+  }
+
+  renderTabs();
+  renderCard();
+})();
+</script>
+</body>
+</html>
