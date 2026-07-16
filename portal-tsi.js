@@ -137,19 +137,19 @@
       reuse: 'synthesis module \u2014 build after GSR.3-GSR.6 exist', file: 'apps/tsi-gsr.html', modules: ['GSR.7'] },
 
     /* --- Probabilistic and Statistical Reasoning (PSR) --- */
-    { sec: 'prob', id: 'PSR.1', code: 'PSR.1', onCRC: false, status: 'soon',
+    { sec: 'prob', id: 'PSR.1', code: 'PSR.1', onCRC: false, status: 'ready',
       name: 'Sort and count data.', reuse: null, file: 'apps/tsi-psr.html', modules: ['PSR.1'] },
-    { sec: 'prob', id: 'PSR.2', code: 'PSR.2', onCRC: false, status: 'soon',
+    { sec: 'prob', id: 'PSR.2', code: 'PSR.2', onCRC: false, status: 'ready',
       name: 'Construct simple graphs and tables.',
       reuse: 'candidate: adapt apps/teks-a4.html chart infrastructure', file: 'apps/tsi-psr.html', modules: ['PSR.2'] },
-    { sec: 'prob', id: 'PSR.3', code: 'PSR.3', onCRC: true, status: 'soon',
+    { sec: 'prob', id: 'PSR.3', code: 'PSR.3', onCRC: true, status: 'ready',
       name: 'Compute and interpret probability.', reuse: null, file: 'apps/tsi-psr.html', modules: ['PSR.3'] },
-    { sec: 'prob', id: 'PSR.4', code: 'PSR.4', onCRC: true, status: 'soon',
+    { sec: 'prob', id: 'PSR.4', code: 'PSR.4', onCRC: true, status: 'ready',
       name: 'Compute and describe measures of center and spread of data.', reuse: null, file: 'apps/tsi-psr.html', modules: ['PSR.4'] },
-    { sec: 'prob', id: 'PSR.5', code: 'PSR.5', onCRC: true, status: 'soon',
+    { sec: 'prob', id: 'PSR.5', code: 'PSR.5', onCRC: true, status: 'ready',
       name: 'Classify data and construct appropriate representations of data.',
       reuse: 'apps/teks-a4.html scatterplot piece is one of several representation types', file: 'apps/tsi-psr.html', modules: ['PSR.5'] },
-    { sec: 'prob', id: 'PSR.6', code: 'PSR.6', onCRC: true, status: 'soon',
+    { sec: 'prob', id: 'PSR.6', code: 'PSR.6', onCRC: true, status: 'ready',
       name: 'Analyze, interpret, and draw conclusions from data.',
       reuse: 'apps/teks-a4.html A.4C regression logic is a narrow slice of this', file: 'apps/tsi-psr.html', modules: ['PSR.6'] }
   ];
