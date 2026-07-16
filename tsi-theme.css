@@ -310,6 +310,8 @@ td.num.muted, td.muted{color:var(--muted); font-weight:700}
 .stepList{margin:0; padding-left:20px; font-size:13.5px; font-weight:700; color:var(--ink)}
 .stepList li{margin-bottom:8px; line-height:1.5}
 
+.stepsNote{color:var(--muted); font-size:11.5px; font-weight:700; line-height:1.4; margin:-4px 0 12px}
+
 /* ---------- feedback + answer lock states ---------- */
 .fbMsg{min-height:20px; margin:2px 0 10px; font-weight:900; font-size:14px}
 .fbMsg.ok{color:var(--ok)}
