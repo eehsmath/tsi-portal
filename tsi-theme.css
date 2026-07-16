@@ -243,3 +243,81 @@ td.num.muted, td.muted{color:var(--muted); font-weight:700}
   .stone .bar{max-width:150px}
   .idBox{justify-content:flex-start}
 }
+
+/* =====================================================================
+   PRACTICE-MODULE REUSABLE PIECES
+   ---------------------------------------------------------------------
+   Ported from math_software_best_practices.md Parts 2 & 3. Subject-
+   agnostic — used first by apps/tsi-ar.html (AR.1), reused as-is by
+   every AR/QR/PSR/GSR module going forward. Lives here (not inline per
+   file) because every TSI section page already shares this one
+   stylesheet — same reasoning as the rest of the file.
+   ===================================================================== */
+
+/* ---------- shared floating keyboard (Part 2.1) ---------- */
+.drKbdPop{display:none; position:fixed; z-index:1500; background:#fff; border:1px solid var(--ui);
+  border-radius:12px; box-shadow:0 12px 28px rgba(40,20,5,.18); padding:10px}
+.drKbdGrid{display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:7px}
+.drKey{padding:7px 2px; text-align:center; border:1px solid var(--ui); border-radius:10px; background:#fff;
+  font-weight:900; cursor:pointer; user-select:none; font-family:inherit; font-size:13px; color:var(--ink)}
+.drKey.wide{grid-column:1 / -1; background:#fbf3e6}
+.drKeyWide{grid-column:span 4; min-width:0; overflow-wrap:break-word; font-size:10.5px}
+.miniKbdBtn{display:inline-flex; align-items:center; gap:7px; height:40px; padding:0 14px; border:1px solid var(--ui);
+  border-radius:12px; background:#fff; font-weight:900; font-size:13.5px; color:var(--ink); cursor:pointer;
+  font-family:inherit; margin-top:10px}
+.miniKbdBtn svg{width:17px; height:17px}
+.miniKbdBtn.active{background:#fbeedd; border-color:#e6c78f}
+
+/* ---------- segmented selector: primary row (Part 2.2) ---------- */
+.drSeg{display:inline-flex; gap:4px; padding:4px; background:#fdf6ec; border:1px solid var(--ui); border-radius:12px; flex-wrap:wrap}
+.drSeg button{border:0; background:transparent; font-family:inherit; font-weight:900; font-size:13px;
+  color:var(--muted); padding:7px 13px; border-radius:8px; cursor:pointer}
+.drSeg button:hover{color:var(--ink)}
+.drSeg button.active{background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(80,50,20,.12)}
+
+/* ---------- multi-part question layout (Part 2.3) ---------- */
+.qPart{padding-top:12px; margin-top:12px; border-top:1px dashed var(--ui)}
+.qPart:first-child{padding-top:0; margin-top:0; border-top:none}
+.qLabel{font-size:11px; font-weight:900; letter-spacing:.8px; color:var(--muted); text-transform:uppercase; margin-bottom:6px}
+.qQuestion{font-size:clamp(16px,2.2vw,19px); font-weight:900; margin-bottom:8px}
+
+/* ---------- binary / multi choice controls (Part 2.4) ---------- */
+.choice2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.choice2 button{padding:13px 14px; font-size:clamp(15px,2vw,16.5px); font-weight:900;
+  text-align:center; border:1px solid var(--ui); border-radius:12px; background:#fff; cursor:pointer; font-family:inherit}
+.choice2 button.sel{border-color:#7fb5a8; background:#eafbf5}
+.choice2 button.right{border-color:#3fae6a; background:#eafff2}
+.choice2 button.wrong{border-color:#e5484d; background:#fff2f2}
+.choice2 button[disabled]{cursor:default; opacity:.85}
+
+/* 4-way relation-symbol picker (AR.1 inequalities; same state vocabulary as .choice2) */
+.relSel{display:inline-flex; gap:6px; flex-wrap:wrap}
+.relSel button{min-width:44px; height:44px; font-size:19px; font-weight:900; border:2px solid var(--ui);
+  border-radius:12px; background:#fff; cursor:pointer; font-family:inherit; color:var(--ink)}
+.relSel button.sel{border-color:var(--accent); background:#fbeedd; color:var(--accent)}
+.relSel button.right{border-color:#3fae6a; background:#eafff2; color:#0b6b2f}
+.relSel button.wrong{border-color:#e5484d; background:#fff2f2; color:#b21f2d}
+.relSel button[disabled]{cursor:default}
+
+/* ---------- rational / stacked-fraction display (Part 3) ---------- */
+.vfrac{display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; margin:0 2px; line-height:1.05}
+.vfrac span{display:block; padding:0 3px}
+.vfrac span:first-child{border-bottom:2px solid currentColor}
+
+/* ---------- question display + worked-solution steps ---------- */
+.eqLine{font-size:clamp(19px,3vw,24px); font-weight:900; letter-spacing:.2px; margin:4px 0 2px}
+.ansLabel{font-weight:900; font-size:15px; color:var(--muted)}
+.stepList{margin:0; padding-left:20px; font-size:13.5px; font-weight:700; color:var(--ink)}
+.stepList li{margin-bottom:8px; line-height:1.5}
+
+/* ---------- feedback + answer lock states ---------- */
+.fbMsg{min-height:20px; margin:2px 0 10px; font-weight:900; font-size:14px}
+.fbMsg.ok{color:var(--ok)}
+.fbMsg.err{color:var(--err)}
+.fbMsg.warn{color:#7a5a00}
+.answerArea{flex-wrap:wrap}
+.answerArea input.in{height:44px; border:2px solid var(--ui); border-radius:12px; padding:0 14px;
+  font-weight:800; font-size:16px; font-family:inherit; color:var(--ink); min-width:110px}
+.answerArea input.in.right{border-color:#3fae6a; background:#eafff2}
+.answerArea input.in.wrong{border-color:#e5484d; background:#fff2f2}
+.answerArea input.in[disabled], .answerArea button[disabled]{opacity:.7}
