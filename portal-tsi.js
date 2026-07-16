@@ -73,7 +73,7 @@
                  build that standard. null = clean new build. */
   var REGISTRY = [
     /* --- Algebraic Reasoning (AR) --- */
-    { sec: 'alg', id: 'AR.1', code: 'AR.1', onCRC: true, status: 'soon',
+    { sec: 'alg', id: 'AR.1', code: 'AR.1', onCRC: true, status: 'ready',
       name: 'Solve linear equations, inequalities, and systems of linear equations.',
       reuse: 'apps/teks-a2.html + apps/teks-a5.html', file: 'apps/tsi-ar.html', modules: ['AR.1'] },
     { sec: 'alg', id: 'AR.2', code: 'AR.2', onCRC: true, status: 'soon',
