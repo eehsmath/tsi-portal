@@ -384,6 +384,23 @@
     return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
   }
 
+  /* ---- hints: a nudge only — must never reveal p.x0/p.y0/p.solution or
+     any other value that would let a student back into the answer without
+     doing the algebra. Safe to use freely; never blocks Check credit. ---- */
+  function AR1HintsDispatch(p) {
+    if (p.kind === 'eq') {
+      var msg = p.distrib ? 'Start by distributing the parentheses on the left side. ' : '';
+      msg += 'Then move every x-term to one side and every constant to the other, and divide by the x-coefficient.';
+      return '<p>' + msg + '</p>';
+    }
+    if (p.kind === 'ineq') {
+      return '<p>Move the x-terms to one side and the constants to the other, just like an equation. ' +
+        'If the x-coefficient ends up negative, dividing by it flips the inequality symbol \u2014 check yours carefully.</p>';
+    }
+    return '<p>Try multiplying one or both equations so the coefficient of x (or y) matches in both, ' +
+      'then add or subtract the equations to eliminate that variable.</p>';
+  }
+
   function typeSelHTML() {
     return segWrap('Type', 'ar1TypeSel', AR1_curType, [
       ['mixed', 'Mixed'], ['eq', 'Equations'], ['ineq', 'Inequalities'], ['sys', 'Systems']
@@ -408,7 +425,7 @@
       answerHTML: function (p) { return AR1AnswerDispatch(p); },
       read: function (p) { return AR1ReadDispatch(p); },
       check: function (p, ans) { return AR1CheckDispatch(p, ans); },
-      hints: function (p) { return AR1StepsDispatch(p); },
+      hints: function (p) { return AR1HintsDispatch(p); },
       steps: function (p) { return AR1StepsDispatch(p); },
       init: function (p) {
         wireSeg('ar1TypeSel', AR1_curType, function (v) { AR1_curType = v; renderCard(); });
@@ -482,6 +499,7 @@
 
     var p = stub.gen();
     var controls = stub.controlsHTML ? stub.controlsHTML(p) : '';
+    var hasSteps = !!stub.steps;
     $('#card').innerHTML =
       '<span class="seCode">'+r.code+'</span>' +
       '<div class="seName">'+r.name+'</div>' +
@@ -491,11 +509,25 @@
       '<div class="fbMsg" id="fbMsg" aria-live="polite"></div>' +
       '<div class="actionRow" id="actionRow">' +
         '<button class="btn primary" id="checkBtn">Check</button>' +
-        '<button class="btn" id="hintBtn">Hint</button>' +
+        (stub.hints ? '<button class="btn" id="hintBtn">Hint</button>' : '') +
+        (hasSteps ? '<button class="btn" id="stepsBtn" title="Shows the full solution \u2014 a correct answer after this won\u2019t count toward mastery">Show steps</button>' : '') +
       '</div>' +
+      (hasSteps ? '<div class="stepsNote">Hint gives you a nudge without the answer. Show steps walks through the full solution \u2014 use it if you\u2019re stuck, but a correct answer afterward won\u2019t count toward mastery.</div>' : '') +
       '<div class="hintPanel" id="hintPanel"></div>';
 
     if (stub.init) stub.init(p);
+
+    /* Per-problem-instance state: reset on every renderCard() call (every
+       new problem), and must persist across any recheck attempts on THIS
+       instance if a future SE ever sets allowRecheck. */
+    var hintLogged = false;    // guards TSIPortal.hint() against double-counting repeated clicks
+    var stepsRevealed = false; // true once the full solution has been shown for this instance
+
+    function logHintUse(){
+      if (hintLogged) return;
+      hintLogged = true;
+      TSIPortal.hint(r.id);
+    }
 
     $('#checkBtn').addEventListener('click', function(){
       var ans = stub.read ? stub.read(p) : null;
@@ -506,26 +538,45 @@
         return;
       }
       closeKeyboards();
-      var correct = stub.check(p, ans);
-      TSIPortal.record(r.id, correct, { level: 1 });
-      fb.textContent = correct ? 'Correct! \u2713' : 'Not quite \u2014 see the steps below.';
-      fb.className = 'fbMsg ' + (correct ? 'ok' : 'err');
+      var trueCorrect = stub.check(p, ans);
+      var countedCorrect = trueCorrect && !stepsRevealed;
+      TSIPortal.record(r.id, countedCorrect, { level: 1 });   // steps-revealed correct answers record as NOT correct — see tsi_ar_tweaking_log.md
+      if (trueCorrect && stepsRevealed){
+        fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
+        fb.className = 'fbMsg warn';
+      } else if (trueCorrect){
+        fb.textContent = 'Correct! \u2713';
+        fb.className = 'fbMsg ok';
+      } else {
+        fb.textContent = 'Not quite \u2014 see the steps below.';
+        fb.className = 'fbMsg err';
+      }
       document.querySelectorAll('#answerArea input, #answerArea button').forEach(function(el){ el.disabled = true; });
       $('#checkBtn').disabled = true;
-      if (stub.reveal) stub.reveal(p, correct);
+      if (stub.reveal) stub.reveal(p, trueCorrect);
       var nextBtn = document.createElement('button');
       nextBtn.type = 'button'; nextBtn.className = 'btn primary'; nextBtn.id = 'nextBtn';
       nextBtn.textContent = 'Next problem \u2192';
       nextBtn.addEventListener('click', renderCard);
       $('#actionRow').appendChild(nextBtn);
-      if (!correct){
+      if (!trueCorrect && hasSteps){
+        stepsRevealed = true;   // locked already, but keep state consistent for any future recheck design
         var panel = $('#hintPanel');
         panel.innerHTML = stub.steps(p);
         panel.classList.add('show');
       }
     });
-    $('#hintBtn').addEventListener('click', function(){
-      TSIPortal.hint(r.id);
+    var hintBtnEl = $('#hintBtn');
+    if (hintBtnEl) hintBtnEl.addEventListener('click', function(){
+      logHintUse();
+      var panel = $('#hintPanel');
+      panel.innerHTML = stub.hints(p);
+      panel.classList.add('show');
+    });
+    var stepsBtnEl = $('#stepsBtn');
+    if (stepsBtnEl) stepsBtnEl.addEventListener('click', function(){
+      logHintUse();
+      stepsRevealed = true;
       var panel = $('#hintPanel');
       panel.innerHTML = stub.steps(p);
       panel.classList.add('show');
