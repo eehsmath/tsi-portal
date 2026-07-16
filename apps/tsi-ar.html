@@ -30,21 +30,404 @@
   var $ = function(s){ return document.querySelector(s); };
   var SECTION_ID = 'alg';
 
-  /* ---------------------------------------------------------------------
-     STUBS — one entry per standard id in this section. Each entry is
-     where the real question-generator logic goes:
-       gen()          -> builds a fresh problem object (p)
-       prompt(p)      -> HTML for the question + answer inputs
-       check(p, ans)  -> returns true/false
-       steps(p)       -> HTML for the hint/step reveal
-     Until an entry exists here, the card falls back to a generic
-     "not built yet" placeholder. Fill one in and its standard goes live
-     without touching any of the surrounding tab/card/tracking code —
-     same incremental pattern as the Algebra 1 modules (one SE at a time).
-     --------------------------------------------------------------------- */
+  /* =====================================================================
+     SHARED BUILDING BLOCKS — ported from math_software_best_practices.md
+     Parts 2 & 3. First use in the TSI project (AR.1 is the first real
+     module built), so they're introduced here rather than assumed to
+     exist. When QR/PSR/GSR get their first real SEs, port this whole
+     block into those files wholesale before writing anything new —
+     don't re-derive it.
+     ===================================================================== */
+
+  /* ---------------- Part 3: rational engine ---------------- */
+  var MIN = '\u2212'; // display minus — never a hyphen
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = b; b = a % b; a = t; } return a || 1; }
+  function R(n, d) { d = (d == null) ? 1 : d; if (d < 0) { n = -n; d = -d; } var g = gcd(n, d) || 1; return { n: n / g, d: d / g }; }
+  function req(a, b) { return a.n === b.n && a.d === b.d; }
+  function parseRat(s) {
+    if (s == null) return null;
+    var t = String(s).trim().replace(/\u2212/g, '-');
+    if (t === '') return null;
+    if (/^-?\d+\/\d+$/.test(t)) {
+      var parts = t.split('/'); var d = parseInt(parts[1], 10);
+      if (d === 0) return null;
+      return R(parseInt(parts[0], 10), d);
+    }
+    if (/^-?\d+$/.test(t)) return R(parseInt(t, 10), 1);
+    if (/^-?\d+\.\d+$/.test(t)) {
+      var neg = t[0] === '-'; var abs = neg ? t.slice(1) : t;
+      var pieces = abs.split('.'); var d2 = Math.pow(10, pieces[1].length);
+      var n2 = parseInt(pieces[0] + pieces[1], 10);
+      return R(neg ? -n2 : n2, d2);
+    }
+    return null;
+  }
+
+  /* ---------------- Part 3.1/3.2: sign-aware display helpers ---------------- */
+  function fmtInt(v) { return v < 0 ? MIN + Math.abs(v) : String(v); }
+  function joinConstInt(v) { if (v === 0) return ''; return v < 0 ? ' ' + MIN + ' ' + Math.abs(v) : ' + ' + v; }
+  function firstVarTerm(coef, v) {
+    if (coef === 1) return v;
+    if (coef === -1) return MIN + v;
+    return (coef < 0 ? MIN + Math.abs(coef) : String(coef)) + v;
+  }
+  function joinVarTerm(coef, v) {
+    if (coef === 0) return '';
+    if (coef === 1) return ' + ' + v;
+    if (coef === -1) return ' ' + MIN + ' ' + v;
+    return coef < 0 ? ' ' + MIN + ' ' + Math.abs(coef) + v : ' + ' + coef + v;
+  }
+  function relHTML(r) { return { '<': '&lt;', '>': '&gt;', '\u2264': '&le;', '\u2265': '&ge;' }[r]; }
+  function flipRel(r) { return { '<': '>', '>': '<', '\u2264': '\u2265', '\u2265': '\u2264' }[r]; }
+
+  /* ---------------- random helpers ---------------- */
+  function ri(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+  function nonZero(lo, hi) { var v; do { v = ri(lo, hi); } while (v === 0); return v; }
+  function pick(arr) { return arr[ri(0, arr.length - 1)]; }
+
+  /* ---------------- Part 2.1: shared floating keyboard ---------------- */
+  var SHARED_KEYS = ['0','1','2','3','4','5','6','7','8','9','/','\u2212','.'];
+  var sharedActiveInput = null;
+  function buildSharedKbdGrid(pop) {
+    var grid = pop.querySelector('.drKbdGrid'); grid.innerHTML = '';
+    var extra = (grid.dataset.extra || '').split(',').filter(Boolean);
+    SHARED_KEYS.concat(extra).forEach(function (k) {
+      var b = document.createElement('button'); b.type = 'button';
+      b.className = 'drKey' + (k.length > 1 ? ' drKeyWide' : ''); b.textContent = k;
+      b.addEventListener('click', function () {
+        var input = sharedActiveInput; if (!input) return;
+        input.focus();
+        var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+        var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+        input.value = input.value.slice(0, s) + k + input.value.slice(e2);
+        var pos = s + k.length; input.setSelectionRange(pos, pos);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      grid.appendChild(b);
+    });
+    var bs = document.createElement('button'); bs.type = 'button'; bs.className = 'drKey wide'; bs.textContent = '\u232B';
+    bs.addEventListener('click', function () {
+      var input = sharedActiveInput; if (!input) return;
+      input.focus();
+      var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+      var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+      if (s === e2 && s > 0) { s = s - 1; }
+      input.value = input.value.slice(0, s) + input.value.slice(e2);
+      input.setSelectionRange(s, s);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    grid.appendChild(bs);
+  }
+  function closeKeyboards() {
+    document.querySelectorAll('.drKbdPop').forEach(function (p) { p.style.display = 'none'; });
+    document.querySelectorAll('.miniKbdBtn.active').forEach(function (b) { b.classList.remove('active'); });
+  }
+  var kbdDocWired = false;
+  function ensureKbdDocWiring() {
+    if (kbdDocWired) return; kbdDocWired = true;
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('.drKbdPop') || e.target.closest('.drKbdBtn') || e.target.closest('.miniKbdBtn')) return;
+      closeKeyboards();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeKeyboards(); });
+    window.addEventListener('resize', closeKeyboards);
+  }
+  function placeKbd(pop, anchor) {
+    var r = anchor.getBoundingClientRect(), margin = 8;
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    pop.style.width = Math.min(Math.max(r.width, 240), 420) + 'px';
+    var left = r.left, top = r.bottom + margin;
+    if (left + pop.offsetWidth > vw - 10) left = vw - 10 - pop.offsetWidth;
+    if (top + pop.offsetHeight > vh - 10) top = r.top - pop.offsetHeight - margin;
+    pop.style.left = Math.max(6, left) + 'px'; pop.style.top = Math.max(6, top) + 'px';
+  }
+  function wireSharedKbd(scopeEl, btnId, popId) {
+    var btn = document.getElementById(btnId), pop = document.getElementById(popId);
+    if (!btn || !pop || !scopeEl) return;
+    buildSharedKbdGrid(pop);
+    sharedActiveInput = scopeEl.querySelector('input.in');
+    if (!scopeEl._sharedKbdWired) {
+      scopeEl._sharedKbdWired = true;
+      scopeEl.addEventListener('focusin', function (e) {
+        if (e.target && e.target.tagName === 'INPUT' && e.target.classList.contains('in')) sharedActiveInput = e.target;
+      });
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var show = pop.style.display !== 'block';
+      closeKeyboards();
+      if (show) { pop.style.display = 'block'; placeKbd(pop, btn); btn.classList.add('active'); if (sharedActiveInput) sharedActiveInput.focus(); }
+    });
+    ensureKbdDocWiring();
+  }
+  function kbdSVG() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="3" y="6" width="18" height="12" rx="2"></rect>' +
+      '<path d="M7 10h2M11 10h2M15 10h2M5 14h14"></path></svg>';
+  }
+  function sharedKbdHTML(extraKeys) {
+    return '<div>' +
+      '<button type="button" class="miniKbdBtn" id="sharedKbdBtn" aria-label="Open keyboard">' + kbdSVG() + '<span>Keyboard</span></button>' +
+      '<div class="drKbdPop" id="sharedKbdPop"><div class="drKbdGrid" data-extra="' + (extraKeys ? extraKeys.join(',') : '') + '"></div></div>' +
+      '</div>';
+  }
+
+  /* ---------------- Part 2.2: segmented selector ---------------- */
+  function seg(id, cur, opts) {
+    var h = '<div class="drSeg" id="' + id + '" role="tablist">';
+    opts.forEach(function (o) {
+      h += '<button type="button" data-v="' + o[0] + '"' + (o[0] === cur ? ' class="active"' : '') + '>' + o[1] + '</button>';
+    });
+    return h + '</div>';
+  }
+  function segWrap(label, id, cur, opts) {
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<span style="font-size:12px;font-weight:900;letter-spacing:.4px;color:var(--muted)">' + label + '</span>' +
+      seg(id, cur, opts) + '</div>';
+  }
+  function wireSeg(id, cur, onChange) {
+    var el = document.getElementById(id); if (!el) return;
+    el.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { onChange(b.getAttribute('data-v')); });
+    });
+  }
+
+  /* =====================================================================
+     AR.1 — Solve linear equations, inequalities, and systems of linear
+     equations.
+     ---------------------------------------------------------------------
+     One SE covering all three kinds, switched by a TYPE selector (Part
+     2.2 pattern) rather than three separate registry ids — matches how
+     the registry currently lists AR.1 as a single module. "Mixed" picks
+     a kind uniformly at random each new problem.
+
+     v1 scope note (see tsi_ar_tweaking_log.md): all three kinds use
+     reverse-engineered integer solutions (the target answer is chosen
+     first, coefficients are built to match it) so every problem has a
+     clean exact answer. Fractional solutions are a planned follow-up
+     once this pattern is validated in class.
+     ===================================================================== */
+
+  var AR1_curType = 'mixed';   // persists across problems until the tab/page is reloaded
+  var AR1_selRel = null;       // relation-symbol pick for the current inequality problem only
+
+  /* ---- generators (identical logic to ar1-logic.js / test-ar1-logic.js, verified over 20k trials per kind) ---- */
+  function genEq() {
+    var x0 = nonZero(-10, 10);
+    var a = nonZero(-6, 6);
+    var c; do { c = ri(-6, 6); } while (c === a);
+    var distrib = Math.random() < 0.4 && Math.abs(a) >= 2;
+    var p = { kind: 'eq', a: a, c: c, distrib: distrib, x0: x0 };
+    var leftConst;
+    if (distrib) {
+      var e; do { e = ri(-6, 6); } while (e === 0);
+      var bIn = ri(-8, 8);
+      p.m = a; p.e = e; p.bIn = bIn;
+      leftConst = a * e + bIn;
+    } else {
+      var bLeft = ri(-10, 10);
+      p.bLeft = bLeft;
+      leftConst = bLeft;
+    }
+    p.leftConst = leftConst;
+    p.d = (a - c) * x0 + leftConst;
+    p.solution = R(x0, 1);
+    return p;
+  }
+  function genIneq() {
+    var x0 = nonZero(-10, 10);
+    var a = nonZero(-6, 6);
+    var c; do { c = ri(-6, 6); } while (c === a);
+    var b = ri(-10, 10);
+    var d = (a - c) * x0 + b;
+    var r0 = pick(['<', '>', '\u2264', '\u2265']);
+    var diff = a - c;
+    var finalRel = diff > 0 ? r0 : flipRel(r0);
+    return { kind: 'ineq', a: a, c: c, b: b, d: d, x0: x0, r0: r0, finalRel: finalRel, solution: R(x0, 1) };
+  }
+  function genSys() {
+    var x0 = ri(-6, 6), y0 = ri(-6, 6);
+    var A1, B1, A2, B2, det, tries = 0;
+    do {
+      A1 = nonZero(-5, 5); B1 = nonZero(-5, 5);
+      A2 = nonZero(-5, 5); B2 = nonZero(-5, 5);
+      det = A1 * B2 - A2 * B1;
+      tries++;
+    } while (det === 0 && tries < 200);
+    if (det === 0) { B2 = B2 + (B2 === B1 ? 2 : 1); }
+    var C1 = A1 * x0 + B1 * y0;
+    var C2 = A2 * x0 + B2 * y0;
+    return { kind: 'sys', A1: A1, B1: B1, C1: C1, A2: A2, B2: B2, C2: C2, x0: x0, y0: y0 };
+  }
+  function genAR1(mode) {
+    var kind = mode === 'mixed' ? pick(['eq', 'ineq', 'sys']) : mode;
+    if (kind === 'eq') return genEq();
+    if (kind === 'ineq') return genIneq();
+    return genSys();
+  }
+
+  /* ---- display ---- */
+  function distribLeftHTML(m, e, bIn) {
+    var mStr = (m === 1) ? '' : (m === -1 ? MIN : fmtInt(m));
+    var inner = 'x' + (e < 0 ? (' ' + MIN + ' ' + Math.abs(e)) : (' + ' + e));
+    return mStr + '(' + inner + ')' + joinConstInt(bIn);
+  }
+  function basicLeftHTML(a, bLeft) { return firstVarTerm(a, 'x') + joinConstInt(bLeft); }
+  function rhsHTML(c, d) { return c === 0 ? fmtInt(d) : firstVarTerm(c, 'x') + joinConstInt(d); }
+  function sysEqLineHTML(A, B, C) { return firstVarTerm(A, 'x') + joinVarTerm(B, 'y') + ' = ' + fmtInt(C); }
+
+  function AR1PromptDispatch(p) {
+    if (p.kind === 'eq') {
+      var left = p.distrib ? distribLeftHTML(p.m, p.e, p.bIn) : basicLeftHTML(p.a, p.bLeft);
+      return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">' + left + ' = ' + rhsHTML(p.c, p.d) + '</div>';
+    }
+    if (p.kind === 'ineq') {
+      var left2 = basicLeftHTML(p.a, p.b);
+      return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">' + left2 + ' ' + relHTML(p.r0) + ' ' + rhsHTML(p.c, p.d) + '</div>';
+    }
+    return '<div class="qQuestion">Solve the system:</div>' +
+      '<div class="eqLine">' + sysEqLineHTML(p.A1, p.B1, p.C1) + '</div>' +
+      '<div class="eqLine">' + sysEqLineHTML(p.A2, p.B2, p.C2) + '</div>';
+  }
+
+  function AR1AnswerDispatch(p) {
+    if (p.kind === 'eq') {
+      return '<span class="ansLabel">x =</span>' +
+        '<input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="value of x">' +
+        sharedKbdHTML();
+    }
+    if (p.kind === 'ineq') {
+      var btns = ['<', '\u2264', '>', '\u2265'].map(function (r) {
+        return '<button type="button" data-r="' + r + '">' + relHTML(r) + '</button>';
+      }).join('');
+      return '<span class="ansLabel">x</span>' +
+        '<div class="relSel" id="relSel" role="group" aria-label="inequality symbol">' + btns + '</div>' +
+        '<input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="boundary value">' +
+        sharedKbdHTML();
+    }
+    return '<span class="ansLabel">x =</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="value of x">' +
+      '<span class="ansLabel">y =</span><input type="text" class="in" id="ans_y" autocomplete="off" aria-label="value of y">' +
+      sharedKbdHTML();
+  }
+
+  function AR1ReadDispatch(p) {
+    if (p.kind === 'sys') {
+      var ex = document.getElementById('ans_x'), ey = document.getElementById('ans_y');
+      var vx = ex ? ex.value.trim() : '', vy = ey ? ey.value.trim() : '';
+      if (vx === '' && vy === '') return null;
+      return { x: vx, y: vy };
+    }
+    var el = document.getElementById('ans_x');
+    var v = el ? el.value.trim() : '';
+    if (p.kind === 'ineq') {
+      if (v === '' && !AR1_selRel) return null;
+      return { rel: AR1_selRel, x: v };
+    }
+    if (v === '') return null;
+    return { x: v };
+  }
+
+  function AR1CheckDispatch(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'eq') {
+      var r = parseRat(ans.x); if (!r) return false;
+      return req(r, p.solution);
+    }
+    if (p.kind === 'ineq') {
+      if (!ans.rel || ans.rel !== p.finalRel) return false;
+      var r2 = parseRat(ans.x); if (!r2) return false;
+      return req(r2, p.solution);
+    }
+    var rx = parseRat(ans.x), ry = parseRat(ans.y);
+    if (!rx || !ry) return false;
+    return req(rx, R(p.x0, 1)) && req(ry, R(p.y0, 1));
+  }
+
+  function AR1StepsDispatch(p) {
+    if (p.kind === 'eq') {
+      var lines = [];
+      if (p.distrib) {
+        lines.push('Distribute: ' + fmtInt(p.m) + '(x' + (p.e < 0 ? (' ' + MIN + ' ' + Math.abs(p.e)) : (' + ' + p.e)) + ')' + joinConstInt(p.bIn) +
+          ' &rarr; ' + firstVarTerm(p.m, 'x') + joinConstInt(p.leftConst));
+      }
+      var diff = p.a - p.c, rhsConst = p.d - p.leftConst;
+      lines.push('Move the variable terms to one side and the constants to the other:');
+      lines.push('(' + fmtInt(p.a) + ' ' + MIN + ' (' + fmtInt(p.c) + '))x = ' + fmtInt(p.d) + ' ' + MIN + ' (' + fmtInt(p.leftConst) + ')');
+      lines.push(fmtInt(diff) + 'x = ' + fmtInt(rhsConst));
+      lines.push('x = ' + fmtInt(rhsConst) + ' / ' + fmtInt(diff) + ' = ' + fmtInt(p.x0));
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'ineq') {
+      var diff2 = p.a - p.c, rhsConst2 = p.d - p.b;
+      var lines2 = [];
+      lines2.push('Move the variable terms to one side and the constants to the other:');
+      lines2.push('(' + fmtInt(p.a) + ' ' + MIN + ' (' + fmtInt(p.c) + '))x ' + relHTML(p.r0) + ' ' + fmtInt(p.d) + ' ' + MIN + ' (' + fmtInt(p.b) + ')');
+      lines2.push(fmtInt(diff2) + 'x ' + relHTML(p.r0) + ' ' + fmtInt(rhsConst2));
+      if (diff2 < 0) {
+        lines2.push('Dividing by a negative number (' + fmtInt(diff2) + ') flips the inequality symbol:');
+      }
+      lines2.push('x ' + relHTML(p.finalRel) + ' ' + fmtInt(p.x0));
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    var A1 = p.A1, B1 = p.B1, C1 = p.C1, A2 = p.A2, B2 = p.B2, C2 = p.C2;
+    var yNum = A2 * C1 - A1 * C2, yDen = A2 * B1 - A1 * B2;
+    var lines3 = [];
+    lines3.push('Multiply the first equation by ' + fmtInt(A2) + ' and the second by ' + fmtInt(A1) + ' so the x-coefficients match:');
+    lines3.push(fmtInt(A1 * A2) + 'x' + joinVarTerm(A2 * B1, 'y') + ' = ' + fmtInt(A2 * C1));
+    lines3.push(fmtInt(A1 * A2) + 'x' + joinVarTerm(A1 * B2, 'y') + ' = ' + fmtInt(A1 * C2));
+    lines3.push('Subtract to eliminate x:');
+    lines3.push('(' + fmtInt(A2 * B1) + ' ' + MIN + ' (' + fmtInt(A1 * B2) + '))y = ' + fmtInt(A2 * C1) + ' ' + MIN + ' (' + fmtInt(A1 * C2) + ')');
+    lines3.push(fmtInt(yDen) + 'y = ' + fmtInt(yNum) + '  &rarr;  y = ' + fmtInt(p.y0));
+    lines3.push('Substitute y back into the first equation to solve for x:');
+    lines3.push(fmtInt(A1) + 'x' + joinConstInt(B1 * p.y0) + ' = ' + fmtInt(C1));
+    lines3.push('x = ' + fmtInt(C1 - B1 * p.y0) + ' / ' + fmtInt(A1) + ' = ' + fmtInt(p.x0));
+    return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+  }
+
+  function typeSelHTML() {
+    return segWrap('Type', 'ar1TypeSel', AR1_curType, [
+      ['mixed', 'Mixed'], ['eq', 'Equations'], ['ineq', 'Inequalities'], ['sys', 'Systems']
+    ]);
+  }
+  function wireRelSel() {
+    var host = document.getElementById('relSel'); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        AR1_selRel = b.getAttribute('data-r');
+        host.querySelectorAll('button').forEach(function (x) { x.classList.remove('sel'); });
+        b.classList.add('sel');
+      });
+    });
+  }
+
   var STUBS = {
-    // 'AR.1': { gen: function(){...}, prompt: function(p){...},
-    //           check: function(p, ans){...}, steps: function(p){...} }
+    'AR.1': {
+      gen: function () { AR1_selRel = null; return genAR1(AR1_curType); },
+      controlsHTML: function () { return typeSelHTML(); },
+      prompt: function (p) { return AR1PromptDispatch(p); },
+      answerHTML: function (p) { return AR1AnswerDispatch(p); },
+      read: function (p) { return AR1ReadDispatch(p); },
+      check: function (p, ans) { return AR1CheckDispatch(p, ans); },
+      hints: function (p) { return AR1StepsDispatch(p); },
+      steps: function (p) { return AR1StepsDispatch(p); },
+      init: function (p) {
+        wireSeg('ar1TypeSel', AR1_curType, function (v) { AR1_curType = v; renderCard(); });
+        wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+        if (p.kind === 'ineq') wireRelSel();
+      },
+      reveal: function (p, correct) {
+        document.querySelectorAll('#answerArea input.in').forEach(function (el) { el.classList.add(correct ? 'right' : 'wrong'); });
+        var relSelEl = document.getElementById('relSel');
+        if (relSelEl && p.kind === 'ineq') {
+          relSelEl.querySelectorAll('button').forEach(function (b) {
+            if (b.getAttribute('data-r') === p.finalRel) b.classList.add('right');
+            else if (b.classList.contains('sel')) b.classList.add('wrong');
+          });
+        }
+      },
+      emptyMsg: 'Enter your answer before checking.'
+    }
+    // 'AR.2': { ... } etc. — same pattern, filled in one standard at a time.
   };
 
   var STANDARDS = TSIPortal.REGISTRY.filter(function(r){ return r.sec === SECTION_ID; });
@@ -70,6 +453,13 @@
     });
   }
 
+  /* ---------------------------------------------------------------------
+     renderCard — the fixed controller (Part 0.3). Drives whichever SE is
+     selected via the full Part 1 contract: gen -> prompt/answerHTML ->
+     (user answers) -> read -> check -> record -> reveal, with hints/steps
+     available on demand. A standard with no STUBS entry still falls back
+     to the original "not built yet" placeholder untouched.
+     --------------------------------------------------------------------- */
   function renderCard(){
     var r = STANDARDS[cur];
     $('#curCode').textContent = r.code;
@@ -90,26 +480,52 @@
       return;
     }
 
-    // Real implementation path, once STUBS[r.id] exists:
     var p = stub.gen();
+    var controls = stub.controlsHTML ? stub.controlsHTML(p) : '';
     $('#card').innerHTML =
       '<span class="seCode">'+r.code+'</span>' +
       '<div class="seName">'+r.name+'</div>' +
+      controls +
       '<div class="promptArea" id="promptArea">'+stub.prompt(p)+'</div>' +
-      '<div class="actionRow">' +
+      '<div class="answerArea" id="answerArea">'+stub.answerHTML(p)+'</div>' +
+      '<div class="fbMsg" id="fbMsg" aria-live="polite"></div>' +
+      '<div class="actionRow" id="actionRow">' +
         '<button class="btn primary" id="checkBtn">Check</button>' +
         '<button class="btn" id="hintBtn">Hint</button>' +
       '</div>' +
       '<div class="hintPanel" id="hintPanel"></div>';
 
+    if (stub.init) stub.init(p);
+
     $('#checkBtn').addEventListener('click', function(){
-      var ans = $('#promptArea').querySelector('input') ? $('#promptArea').querySelector('input').value : '';
+      var ans = stub.read ? stub.read(p) : null;
+      var fb = $('#fbMsg');
+      if (ans === null){
+        fb.textContent = stub.emptyMsg || 'Please enter an answer.';
+        fb.className = 'fbMsg warn';
+        return;
+      }
+      closeKeyboards();
       var correct = stub.check(p, ans);
-      TSIPortal.record(r.id, correct, { level: 1 });   // <- real recording call
-      renderCard();
+      TSIPortal.record(r.id, correct, { level: 1 });
+      fb.textContent = correct ? 'Correct! \u2713' : 'Not quite \u2014 see the steps below.';
+      fb.className = 'fbMsg ' + (correct ? 'ok' : 'err');
+      document.querySelectorAll('#answerArea input, #answerArea button').forEach(function(el){ el.disabled = true; });
+      $('#checkBtn').disabled = true;
+      if (stub.reveal) stub.reveal(p, correct);
+      var nextBtn = document.createElement('button');
+      nextBtn.type = 'button'; nextBtn.className = 'btn primary'; nextBtn.id = 'nextBtn';
+      nextBtn.textContent = 'Next problem \u2192';
+      nextBtn.addEventListener('click', renderCard);
+      $('#actionRow').appendChild(nextBtn);
+      if (!correct){
+        var panel = $('#hintPanel');
+        panel.innerHTML = stub.steps(p);
+        panel.classList.add('show');
+      }
     });
     $('#hintBtn').addEventListener('click', function(){
-      TSIPortal.hint(r.id);                            // <- real hint call
+      TSIPortal.hint(r.id);
       var panel = $('#hintPanel');
       panel.innerHTML = stub.steps(p);
       panel.classList.add('show');
