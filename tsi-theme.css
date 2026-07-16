@@ -215,8 +215,7 @@ td.num.muted, td.muted{color:var(--muted); font-weight:700}
 .modTabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
 .modTab{border:1px solid var(--ui); background:#fff; border-radius:999px; padding:8px 14px;
   font-weight:900; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit}
-.modTab.active{background:var(--accent); border-color:var(--accent); color:#fff}
-.modCard{background:var(--panel); border:1px solid var(--ui); border-radius:18px; box-shadow:var(--shadow); padding:20px}
+.modTab.active{background:var(--accent); border-color:var(--accent); color:#7a1930}.modCard{background:var(--panel); border:1px solid var(--ui); border-radius:18px; box-shadow:var(--shadow); padding:20px}
 .modCard .seCode{display:inline-block; font-weight:900; font-size:12px; color:var(--accent);
   background:#fbeedd; border:1px solid var(--ui); border-radius:6px; padding:2px 8px; margin-bottom:8px}
 .modCard .seName{font-weight:800; font-size:15px; margin-bottom:14px}
