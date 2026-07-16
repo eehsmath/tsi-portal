@@ -31,10 +31,981 @@
   var $ = function(s){ return document.querySelector(s); };
   var SECTION_ID = 'prob';
 
-  /* See apps/tsi-ar.html for the STUBS shape and extension pattern. */
+  /* =====================================================================
+     SHARED BUILDING BLOCKS — ported verbatim from apps/tsi-qr.html per
+     math_software_best_practices.md Part 0.3. See tsi_psr_tweaking_log.md
+     for the porting-status table. Only the pieces PSR actually uses are
+     included (e.g. no joinConstInt/firstVarTerm/joinVarTerm/relHTML —
+     PSR never builds a variable expression or an inequality, so porting
+     those would be dead code per Part 6 #10; no relPickerHTML/choice2
+     either — PSR's own N-way choiceN control below supersedes choice2
+     for every control this file needs, see the porting table).
+     ===================================================================== */
+
+  /* ---------------- Part 3: rational engine ---------------- */
+  var MIN = '\u2212';
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = b; b = a % b; a = t; } return a || 1; }
+  function R(n, d) { d = (d == null) ? 1 : d; if (d < 0) { n = -n; d = -d; } var g = gcd(n, d) || 1; return { n: n / g, d: d / g }; }
+  function req(a, b) { return a.n === b.n && a.d === b.d; }
+  function parseRat(s) {
+    if (s == null) return null;
+    var t = String(s).trim().replace(/\u2212/g, '-');
+    if (t === '') return null;
+    if (/^-?\d+\/\d+$/.test(t)) {
+      var parts = t.split('/'); var d = parseInt(parts[1], 10);
+      if (d === 0) return null;
+      return R(parseInt(parts[0], 10), d);
+    }
+    if (/^-?\d+$/.test(t)) return R(parseInt(t, 10), 1);
+    if (/^-?\d+\.\d+$/.test(t)) {
+      var neg = t[0] === '-'; var abs = neg ? t.slice(1) : t;
+      var pieces = abs.split('.'); var d2 = Math.pow(10, pieces[1].length);
+      var n2 = parseInt(pieces[0] + pieces[1], 10);
+      return R(neg ? -n2 : n2, d2);
+    }
+    return null;
+  }
+
+  /* ---------------- Part 3.1/3.2: sign-aware display helpers ---------------- */
+  function fmtInt(v) { return v < 0 ? MIN + Math.abs(v) : String(v); }
+
+  /* ---------------- random helpers ---------------- */
+  function ri(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+  function nonZero(lo, hi) { var v; do { v = ri(lo, hi); } while (v === 0); return v; }
+  function pick(arr) { return arr[ri(0, arr.length - 1)]; }
+
+  /* ---------------- Part 2.1: shared floating keyboard ---------------- */
+  var SHARED_KEYS = ['0','1','2','3','4','5','6','7','8','9','/','\u2212','.'];
+  var sharedActiveInput = null;
+  function buildSharedKbdGrid(pop) {
+    var grid = pop.querySelector('.drKbdGrid'); grid.innerHTML = '';
+    var extra = (grid.dataset.extra || '').split(',').filter(Boolean);
+    SHARED_KEYS.concat(extra).forEach(function (k) {
+      var b = document.createElement('button'); b.type = 'button';
+      b.className = 'drKey' + (k.length > 1 ? ' drKeyWide' : ''); b.textContent = k;
+      b.addEventListener('click', function () {
+        var input = sharedActiveInput; if (!input) return;
+        input.focus();
+        var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+        var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+        input.value = input.value.slice(0, s) + k + input.value.slice(e2);
+        var pos = s + k.length; input.setSelectionRange(pos, pos);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      grid.appendChild(b);
+    });
+    var bs = document.createElement('button'); bs.type = 'button'; bs.className = 'drKey wide'; bs.textContent = '\u232B';
+    bs.addEventListener('click', function () {
+      var input = sharedActiveInput; if (!input) return;
+      input.focus();
+      var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+      var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+      if (s === e2 && s > 0) { s = s - 1; }
+      input.value = input.value.slice(0, s) + input.value.slice(e2);
+      input.setSelectionRange(s, s);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    grid.appendChild(bs);
+  }
+  function closeKeyboards() {
+    document.querySelectorAll('.drKbdPop').forEach(function (p) { p.style.display = 'none'; });
+    document.querySelectorAll('.miniKbdBtn.active').forEach(function (b) { b.classList.remove('active'); });
+  }
+  var kbdDocWired = false;
+  function ensureKbdDocWiring() {
+    if (kbdDocWired) return; kbdDocWired = true;
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('.drKbdPop') || e.target.closest('.drKbdBtn') || e.target.closest('.miniKbdBtn')) return;
+      closeKeyboards();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeKeyboards(); });
+    window.addEventListener('resize', closeKeyboards);
+  }
+  function placeKbd(pop, anchor) {
+    var r = anchor.getBoundingClientRect(), margin = 8;
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    pop.style.width = Math.min(Math.max(r.width, 240), 420) + 'px';
+    var left = r.left, top = r.bottom + margin;
+    if (left + pop.offsetWidth > vw - 10) left = vw - 10 - pop.offsetWidth;
+    if (top + pop.offsetHeight > vh - 10) top = r.top - pop.offsetHeight - margin;
+    pop.style.left = Math.max(6, left) + 'px'; pop.style.top = Math.max(6, top) + 'px';
+  }
+  function wireSharedKbd(scopeEl, btnId, popId) {
+    var btn = document.getElementById(btnId), pop = document.getElementById(popId);
+    if (!btn || !pop || !scopeEl) return;
+    buildSharedKbdGrid(pop);
+    sharedActiveInput = scopeEl.querySelector('input.in');
+    if (!scopeEl._sharedKbdWired) {
+      scopeEl._sharedKbdWired = true;
+      scopeEl.addEventListener('focusin', function (e) {
+        if (e.target && e.target.tagName === 'INPUT' && e.target.classList.contains('in')) sharedActiveInput = e.target;
+      });
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var show = pop.style.display !== 'block';
+      closeKeyboards();
+      if (show) { pop.style.display = 'block'; placeKbd(pop, btn); btn.classList.add('active'); if (sharedActiveInput) sharedActiveInput.focus(); }
+    });
+    ensureKbdDocWiring();
+  }
+  function kbdSVG() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="3" y="6" width="18" height="12" rx="2"></rect>' +
+      '<path d="M7 10h2M11 10h2M15 10h2M5 14h14"></path></svg>';
+  }
+  function sharedKbdHTML(extraKeys) {
+    return '<div>' +
+      '<button type="button" class="miniKbdBtn" id="sharedKbdBtn" aria-label="Open keyboard">' + kbdSVG() + '<span>Keyboard</span></button>' +
+      '<div class="drKbdPop" id="sharedKbdPop"><div class="drKbdGrid" data-extra="' + (extraKeys ? extraKeys.join(',') : '') + '"></div></div>' +
+      '</div>';
+  }
+
+  /* ---------------- Part 2.2: segmented selector ---------------- */
+  function seg(id, cur, opts) {
+    var h = '<div class="drSeg" id="' + id + '" role="tablist">';
+    opts.forEach(function (o) {
+      h += '<button type="button" data-v="' + o[0] + '"' + (o[0] === cur ? ' class="active"' : '') + '>' + o[1] + '</button>';
+    });
+    return h + '</div>';
+  }
+  function segWrap(label, id, cur, opts) {
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<span style="font-size:12px;font-weight:900;letter-spacing:.4px;color:var(--muted)">' + label + '</span>' +
+      seg(id, cur, opts) + '</div>';
+  }
+  function wireSeg(id, cur, onChange) {
+    var el = document.getElementById(id); if (!el) return;
+    el.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { onChange(b.getAttribute('data-v')); });
+    });
+  }
+  function stdTypeSelHTML(selId, curType, options) { return segWrap('Type', selId, curType, options); }
+  function genericReveal(correct) {
+    document.querySelectorAll('#answerArea input.in').forEach(function (el) { el.classList.add(correct ? 'right' : 'wrong'); });
+  }
+
+  /* ---------------- Part 3 extension (from QR): exact decimal formatting ---------------- */
+  function ratToDecimalStr(r) {
+    var d = r.d, n = r.n, twos = 0, fives = 0, dd = d;
+    while (dd % 2 === 0) { dd /= 2; twos++; }
+    while (dd % 5 === 0) { dd /= 5; fives++; }
+    if (dd !== 1) return null;
+    var k = Math.max(twos, fives);
+    var mul = Math.pow(2, k - twos) * Math.pow(5, k - fives);
+    var scaledN = n * mul;
+    var neg = scaledN < 0; scaledN = Math.abs(scaledN);
+    var s = String(scaledN);
+    while (s.length <= k) s = '0' + s;
+    var intPart = k === 0 ? s : s.slice(0, s.length - k);
+    var fracPart = k === 0 ? '' : s.slice(s.length - k);
+    return (neg ? '-' : '') + intPart + (k > 0 ? '.' + fracPart : '');
+  }
+  function fracHTML(n, d) {
+    var neg = (n < 0) !== (d < 0);
+    n = Math.abs(n); d = Math.abs(d);
+    return (neg ? MIN : '') + '<span class="vfrac"><span>' + n + '</span><span>' + d + '</span></span>';
+  }
+  function pctStr(r) { var p = R(r.n * 100, r.d); return p.d === 1 ? String(p.n) : ratToDecimalStr(p); }
+
+  /* ---------------- PSR-new: shuffle (Fisher-Yates), not needed by QR ---------------- */
+  function shuffle(arr) { var a = arr.slice(); for (var i = a.length - 1; i > 0; i--) { var j = ri(0, i); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+  /* =====================================================================
+     PSR-new shared helpers
+     ===================================================================== */
+  
+  /* ---------------- category/context pools (rotates like QR's word contexts) ---------------- */
+  var CTX_POOL = [
+    { noun: 'favorite color', items: ['Red', 'Blue', 'Green', 'Yellow'] },
+    { noun: 'favorite pet',   items: ['Dog', 'Cat', 'Fish', 'Bird'] },
+    { noun: 'favorite sport', items: ['Soccer', 'Basketball', 'Tennis', 'Swimming'] },
+    { noun: 'favorite fruit', items: ['Apple', 'Banana', 'Grape', 'Orange'] },
+    { noun: 'favorite subject', items: ['Math', 'Science', 'Art', 'History'] }
+  ];
+  
+  /* ---------------- N-way choice control (Part 2.2 generalization pattern,
+     same instinct as QR's relPickerHTML — parameterize rather than copy
+     choice2 a second time for a 3-/4-option need) ----------------
+     Pure string-builder here; wireChoiceN/revealChoiceN (DOM-touching) live
+     only in the shipped HTML file, not in this Node-testable core. */
+  function choiceNHTML(id, options) {
+    var btns = options.map(function (o) { return '<button type="button" data-c="' + o.v + '">' + o.label + '</button>'; }).join('');
+    return '<div class="choiceN" id="' + id + '" role="group">' + btns + '</div>';
+  }
+  
+  /* ---------------- statistical SVG chart builders (Part 2.5 extension) ----------------
+     Every builder: fixed-pixel viewBox, pure string return, no DOM dependency,
+     colors via CSS custom properties so they inherit the page's --accent. */
+  
+  function barChartSVG(categories, counts) {
+    var W = 340, H = 230, mL = 32, mR = 12, mT = 14, mB = 40;
+    var plotW = W - mL - mR, plotH = H - mT - mB;
+    var maxC = Math.max.apply(null, counts);
+    var axisMax = Math.max(4, maxC % 2 === 0 ? maxC : maxC + 1);
+    var n = categories.length;
+    var slot = plotW / n, barW = slot * 0.56;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="bar chart">';
+    /* gridlines + y labels */
+    for (var g = 0; g <= axisMax; g++) {
+      var gy = mT + plotH - (g / axisMax) * plotH;
+      s += '<line x1="' + mL + '" y1="' + gy.toFixed(1) + '" x2="' + (W - mR) + '" y2="' + gy.toFixed(1) + '" stroke="#e8d7bd" stroke-width="1"></line>';
+      s += '<text x="' + (mL - 6) + '" y="' + (gy + 3.5).toFixed(1) + '" font-size="9" text-anchor="end" fill="#8a7358" font-weight="700">' + g + '</text>';
+    }
+    /* axis line */
+    s += '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + plotH) + '" stroke="#8a7358" stroke-width="1.5"></line>';
+    s += '<line x1="' + mL + '" y1="' + (mT + plotH) + '" x2="' + (W - mR) + '" y2="' + (mT + plotH) + '" stroke="#8a7358" stroke-width="1.5"></line>';
+    /* bars + category labels */
+    for (var i = 0; i < n; i++) {
+      var bh = (counts[i] / axisMax) * plotH;
+      var bx = mL + i * slot + (slot - barW) / 2;
+      var by = mT + plotH - bh;
+      s += '<rect x="' + bx.toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="var(--accent)" rx="3"></rect>';
+      s += '<text x="' + (bx + barW / 2).toFixed(1) + '" y="' + (mT + plotH + 15) + '" font-size="10" text-anchor="middle" fill="#2a1f14" font-weight="800">' + categories[i] + '</text>';
+    }
+    s += '</svg>';
+    return s;
+  }
+  
+  /* Chooses a "nice" axis tick step (1/2/5/10/20/25/50/...) so a chart never
+     crowds more than ~10 labels regardless of how wide the generated data's
+     span happens to be — ticks are purely cosmetic labels; dot/box positions
+     are always computed from the exact lo/hi scale, never from tick spacing. */
+  function niceStep(span) {
+    var candidates = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500];
+    for (var i = 0; i < candidates.length; i++) { if (span / candidates[i] <= 10) return candidates[i]; }
+    return 1000;
+  }
+  
+  function dotPlotSVG(values, lo, hi) {
+    var W = 340, H = 140, mL = 18, mR = 18, mT = 14, axisY = 108;
+    var plotW = W - mL - mR;
+    var span = hi - lo;
+    var xScale = plotW / span;
+    var counts = {};
+    var step = niceStep(span);
+    var tickStart = Math.ceil(lo / step) * step;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="dot plot">';
+    s += '<line x1="' + mL + '" y1="' + axisY + '" x2="' + (W - mR) + '" y2="' + axisY + '" stroke="#8a7358" stroke-width="1.5"></line>';
+    for (var v = tickStart; v <= hi; v += step) {
+      var tx = mL + (v - lo) * xScale;
+      s += '<line x1="' + tx.toFixed(1) + '" y1="' + (axisY - 3) + '" x2="' + tx.toFixed(1) + '" y2="' + (axisY + 3) + '" stroke="#8a7358" stroke-width="1"></line>';
+      s += '<text x="' + tx.toFixed(1) + '" y="' + (axisY + 15) + '" font-size="9.5" text-anchor="middle" fill="#2a1f14" font-weight="800">' + v + '</text>';
+    }
+    var sorted = values.slice().sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sorted.length; i++) {
+      var val = sorted[i];
+      counts[val] = (counts[val] || 0) + 1;
+      var cx = mL + (val - lo) * xScale;
+      var cy = axisY - 8 - (counts[val] - 1) * 15;
+      s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="6" fill="var(--accent)"></circle>';
+    }
+    s += '</svg>';
+    return s;
+  }
+  
+  function boxPlotSVG(summary, lo, hi) {
+    var W = 340, H = 130, mL = 20, mR = 20, mT = 26, axisY = 100, boxH = 34;
+    var plotW = W - mL - mR;
+    var span = hi - lo;
+    var xScale = plotW / span;
+    function X(v) { return mL + (v - lo) * xScale; }
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="box plot">';
+    s += '<line x1="' + mL + '" y1="' + axisY + '" x2="' + (W - mR) + '" y2="' + axisY + '" stroke="#8a7358" stroke-width="1.5"></line>';
+    var bpStep = niceStep(span);
+    var bpTickStart = Math.ceil(lo / bpStep) * bpStep;
+    for (var v = bpTickStart; v <= hi; v += bpStep) {
+      var tx = X(v);
+      s += '<line x1="' + tx.toFixed(1) + '" y1="' + (axisY - 3) + '" x2="' + tx.toFixed(1) + '" y2="' + (axisY + 3) + '" stroke="#8a7358" stroke-width="1"></line>';
+      s += '<text x="' + tx.toFixed(1) + '" y="' + (axisY + 15) + '" font-size="9" text-anchor="middle" fill="#2a1f14" font-weight="800">' + v + '</text>';
+    }
+    var boxTop = axisY - 34 - boxH, boxMid = boxTop + boxH / 2;
+    /* whiskers */
+    s += '<line x1="' + X(summary.min).toFixed(1) + '" y1="' + boxMid.toFixed(1) + '" x2="' + X(summary.q1).toFixed(1) + '" y2="' + boxMid.toFixed(1) + '" stroke="#2a1f14" stroke-width="1.5"></line>';
+    s += '<line x1="' + X(summary.q3).toFixed(1) + '" y1="' + boxMid.toFixed(1) + '" x2="' + X(summary.max).toFixed(1) + '" y2="' + boxMid.toFixed(1) + '" stroke="#2a1f14" stroke-width="1.5"></line>';
+    /* end caps */
+    s += '<line x1="' + X(summary.min).toFixed(1) + '" y1="' + (boxMid - 9).toFixed(1) + '" x2="' + X(summary.min).toFixed(1) + '" y2="' + (boxMid + 9).toFixed(1) + '" stroke="#2a1f14" stroke-width="1.5"></line>';
+    s += '<line x1="' + X(summary.max).toFixed(1) + '" y1="' + (boxMid - 9).toFixed(1) + '" x2="' + X(summary.max).toFixed(1) + '" y2="' + (boxMid + 9).toFixed(1) + '" stroke="#2a1f14" stroke-width="1.5"></line>';
+    /* box */
+    s += '<rect x="' + X(summary.q1).toFixed(1) + '" y="' + boxTop.toFixed(1) + '" width="' + (X(summary.q3) - X(summary.q1)).toFixed(1) + '" height="' + boxH + '" fill="var(--accent)" fill-opacity="0.18" stroke="var(--accent)" stroke-width="1.8"></rect>';
+    /* median line */
+    s += '<line x1="' + X(summary.median).toFixed(1) + '" y1="' + boxTop.toFixed(1) + '" x2="' + X(summary.median).toFixed(1) + '" y2="' + (boxTop + boxH).toFixed(1) + '" stroke="var(--accent)" stroke-width="2.4"></line>';
+    s += '</svg>';
+    return s;
+  }
+  
+  function scatterSVG(points) {
+    var W = 300, H = 240, mL = 30, mR = 14, mT = 14, mB = 30;
+    var plotW = W - mL - mR, plotH = H - mT - mB;
+    var xs = points.map(function (p) { return p.x; }), ys = points.map(function (p) { return p.y; });
+    var xLo = Math.min.apply(null, xs) - 1, xHi = Math.max.apply(null, xs) + 1;
+    var yLo = Math.min.apply(null, ys) - 1, yHi = Math.max.apply(null, ys) + 1;
+    var xScale = plotW / (xHi - xLo), yScale = plotH / (yHi - yLo);
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="scatter plot">';
+    s += '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + plotH) + '" stroke="#8a7358" stroke-width="1.5"></line>';
+    s += '<line x1="' + mL + '" y1="' + (mT + plotH) + '" x2="' + (W - mR) + '" y2="' + (mT + plotH) + '" stroke="#8a7358" stroke-width="1.5"></line>';
+    points.forEach(function (p) {
+      var cx = mL + (p.x - xLo) * xScale;
+      var cy = mT + plotH - (p.y - yLo) * yScale;
+      s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="5" fill="var(--accent)" fill-opacity="0.85"></circle>';
+    });
+    s += '</svg>';
+    return s;
+  }
+  
+  function dataTable(cols, rows, blankRowIdx, blankColIdx) {
+    var h = '<table class="ttab sm"><tr>';
+    cols.forEach(function (c) { h += '<th>' + c + '</th>'; });
+    h += '</tr>';
+    rows.forEach(function (row, ri2) {
+      h += '<tr>';
+      row.forEach(function (cell, ci) {
+        var isBlank = (ri2 === blankRowIdx && ci === blankColIdx);
+        h += '<td' + (isBlank ? ' class="unknown"' : '') + '>' + (isBlank ? '?' : cell) + '</td>';
+      });
+      h += '</tr>';
+    });
+    return h + '</table>';
+  }
+  
+  function ordinal(n) {
+    var s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
+
+  /* ---------------- PSR-new: N-way choice DOM wiring (parallels QR's
+     wireChoice2/revealChoice2 exactly, generalized to N options — same
+     "parameterize, never mutate the shared thing" instinct as QR's own
+     relPickerHTML generalization of AR.1's relSel). choice2 itself is
+     untouched; PSR just never needed a fixed 2-way control, so choiceN
+     is used for every choice-style answer in this file, PSR.5's 4-way
+     classify and PSR.6's 3-way/4-way pickers alike. ---------------- */
+  function wireChoiceN(hostId, setter) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setter(b.getAttribute('data-c'));
+        host.querySelectorAll('button').forEach(function (x) { x.classList.remove('sel'); });
+        b.classList.add('sel');
+      });
+    });
+  }
+  function revealChoiceN(hostId, correctV) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.disabled = true;
+      if (b.getAttribute('data-c') === correctV) b.classList.add('right');
+      else if (b.classList.contains('sel')) b.classList.add('wrong');
+    });
+  }
+
+  /* ---------------- PSR-new: shared categorical-data generator, used by
+     PSR.2 (table/bar) and PSR.6 (conclusion) — one source of truth
+     rather than two drifting copies. Guarantees a UNIQUE max and UNIQUE
+     min count (bounded retry) so a "most/least" question is never
+     ambiguous. ---------------- */
+  function generateCategoricalData() {
+    var ctx = pick(CTX_POOL);
+    var counts;
+    for (var attempt = 0; attempt < 30; attempt++) {
+      counts = ctx.items.map(function () { return ri(2, 9); });
+      var maxV = Math.max.apply(null, counts), minV = Math.min.apply(null, counts);
+      var maxCount = counts.filter(function (c) { return c === maxV; }).length;
+      var minCount = counts.filter(function (c) { return c === minV; }).length;
+      if (maxCount === 1 && minCount === 1) break;
+    }
+    var total = counts.reduce(function (a, b) { return a + b; }, 0);
+    return { ctx: ctx, items: ctx.items, counts: counts, total: total };
+  }
+  /* =====================================================================
+     PSR.1 — Sort and count data.
+     ===================================================================== */
+  function genPSR1_tally() {
+    var ctx = pick(CTX_POOL);
+    var n = ri(10, 14);
+    var rawIdx = [];
+    for (var i = 0; i < n; i++) rawIdx.push(ri(0, ctx.items.length - 1));
+    var targetIdx = ri(0, ctx.items.length - 1);
+    var answer = rawIdx.filter(function (x) { return x === targetIdx; }).length;
+    return { kind: 'tally', ctx: ctx, rawIdx: rawIdx, targetIdx: targetIdx, answer: R(answer, 1) };
+  }
+  function genPSR1_order() {
+    var n = ri(6, 9);
+    var vals = [];
+    while (vals.length < n) { var v = ri(1, 60); if (vals.indexOf(v) === -1) vals.push(v); }
+    var direction = pick(['smallest', 'largest']);
+    var rank = ri(1, n);
+    var sorted = vals.slice().sort(function (a, b) { return a - b; });
+    var answer = direction === 'smallest' ? sorted[rank - 1] : sorted[n - rank];
+    return { kind: 'order', vals: vals, direction: direction, rank: rank, n: n, sorted: sorted, answer: R(answer, 1) };
+  }
+  function genPSR1(mode) {
+    var kind = mode === 'mixed' ? pick(['tally', 'order']) : mode;
+    return kind === 'tally' ? genPSR1_tally() : genPSR1_order();
+  }
+  function PSR1Prompt(p) {
+    if (p.kind === 'tally') {
+      var chips = p.rawIdx.map(function (idx) { return '<span class="dataChip">' + p.ctx.items[idx] + '</span>'; }).join(' ');
+      return '<div class="qQuestion">A group of people were asked their ' + p.ctx.noun + '. Here are their answers:</div>' +
+        '<div class="chipRow">' + chips + '</div>' +
+        '<div class="qQuestion" style="margin-top:10px">How many people said <b style="color:var(--accent)">' + p.ctx.items[p.targetIdx] + '</b>?</div>';
+    }
+    return '<div class="qQuestion">Here are ' + p.n + ' numbers:</div>' +
+      '<div class="eqLine">' + p.vals.join(', ') + '</div>' +
+      '<div class="qQuestion" style="margin-top:10px">What is the ' + ordinal(p.rank) + ' ' + p.direction + ' value?</div>';
+  }
+  function PSR1AnswerHTML(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="numeric" autocomplete="off" aria-label="answer">' + sharedKbdHTML(); }
+  function PSR1Check(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
+  function PSR1Hints(p) {
+    if (p.kind === 'tally') return '<p>Go through the list one item at a time and keep a running tally mark for the one you\u2019re counting.</p>';
+    return '<p>Write the numbers in order from smallest to largest first \u2014 then counting to the right position is much easier.</p>';
+  }
+  function PSR1Steps(p) {
+    if (p.kind === 'tally') {
+      return '<ol class="stepList"><li>Count each occurrence of \u201c' + p.ctx.items[p.targetIdx] + '\u201d in the list.</li>' +
+        '<li>Total: ' + p.answer.n + '</li></ol>';
+    }
+    var lines = ['Sorted from smallest to largest: ' + p.sorted.join(', ')];
+    if (p.direction === 'smallest') lines.push('The ' + ordinal(p.rank) + ' smallest value is at position ' + p.rank + ' from the left: ' + p.answer.n);
+    else lines.push('The ' + ordinal(p.rank) + ' largest value is at position ' + p.rank + ' from the right: ' + p.answer.n);
+    return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+  }
+  
+  /* =====================================================================
+     PSR.2 — Construct simple graphs and tables.
+     ===================================================================== */
+  function genPSR2_table() {
+    var d = generateCategoricalData();
+    var blankIdx = ri(0, d.items.length - 1);
+    return { kind: 'table', d: d, blankIdx: blankIdx, answer: R(d.counts[blankIdx], 1) };
+  }
+  function genPSR2_bar() {
+    var d = generateCategoricalData();
+    var i = ri(0, d.items.length - 1), j;
+    do { j = ri(0, d.items.length - 1); } while (j === i);
+    if (d.counts[i] < d.counts[j]) { var t = i; i = j; j = t; }
+    return { kind: 'bar', d: d, i: i, j: j, answer: R(d.counts[i] - d.counts[j], 1) };
+  }
+  function genPSR2(mode) {
+    var kind = mode === 'mixed' ? pick(['table', 'bar']) : mode;
+    return kind === 'table' ? genPSR2_table() : genPSR2_bar();
+  }
+  function PSR2Prompt(p) {
+    var d = p.d;
+    if (p.kind === 'table') {
+      var rows = d.items.map(function (name, i) { return [name, i === p.blankIdx ? null : d.counts[i]]; });
+      return '<div class="qQuestion">A survey of ' + d.total + ' people asked their ' + d.ctx.noun + '. The table shows the results so far.</div>' +
+        dataTable(['Choice', 'Count'], rows, p.blankIdx, 1) +
+        '<div class="qQuestion" style="margin-top:10px">How many people chose <b style="color:var(--accent)">' + d.items[p.blankIdx] + '</b>?</div>';
+    }
+    return '<div class="qQuestion">The bar graph shows the results of a survey about ' + d.ctx.noun + '.</div>' +
+      barChartSVG(d.items, d.counts) +
+      '<div class="qQuestion" style="margin-top:10px">How many more people chose <b style="color:var(--accent)">' + d.items[p.i] + '</b> than <b style="color:var(--accent)">' + d.items[p.j] + '</b>?</div>';
+  }
+  function PSR2AnswerHTML(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="numeric" autocomplete="off" aria-label="answer">' + sharedKbdHTML(); }
+  function PSR2Check(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
+  function PSR2Hints(p) {
+    if (p.kind === 'table') return '<p>The counts in the table must add up to the total shown. Add up the known counts, then subtract that sum from the total.</p>';
+    return '<p>Read each bar\u2019s height against the count axis on the left, then subtract the smaller value from the larger one.</p>';
+  }
+  function PSR2Steps(p) {
+    var d = p.d;
+    if (p.kind === 'table') {
+      var others = d.counts.filter(function (_, i) { return i !== p.blankIdx; });
+      var sumOthers = others.reduce(function (a, b) { return a + b; }, 0);
+      return '<ol class="stepList"><li>Total = ' + d.total + '</li>' +
+        '<li>Sum of the known counts: ' + others.join(' + ') + ' = ' + sumOthers + '</li>' +
+        '<li>Missing count = ' + d.total + ' \u2212 ' + sumOthers + ' = ' + p.answer.n + '</li></ol>';
+    }
+    return '<ol class="stepList"><li>' + d.items[p.i] + ' = ' + d.counts[p.i] + '</li>' +
+      '<li>' + d.items[p.j] + ' = ' + d.counts[p.j] + '</li>' +
+      '<li>Difference = ' + d.counts[p.i] + ' \u2212 ' + d.counts[p.j] + ' = ' + p.answer.n + '</li></ol>';
+  }
+  
+  /* =====================================================================
+     PSR.3 — Compute and interpret probability.
+     ===================================================================== */
+  var CONTAINERS = [
+    { name: 'bag of marbles', unit: 'marble', items: ['red', 'blue', 'green', 'yellow'] },
+    { name: 'jar of candies', unit: 'candy', items: ['cherry', 'lemon', 'grape', 'orange'] },
+    { name: 'spinner', unit: 'section', items: ['A', 'B', 'C', 'D'] },
+    { name: 'box of cards', unit: 'card', items: ['hearts', 'diamonds', 'clubs', 'spades'] }
+  ];
+  function genPSR3Event() {
+    var container = pick(CONTAINERS);
+    var counts = container.items.map(function () { return ri(2, 7); });
+    var total = counts.reduce(function (a, b) { return a + b; }, 0);
+    var targetIdx = ri(0, container.items.length - 1);
+    return { container: container, counts: counts, total: total, targetIdx: targetIdx, favorable: counts[targetIdx] };
+  }
+  function genPSR3_simple() {
+    var ev = genPSR3Event();
+    var complement = Math.random() < 0.15;
+    var fav = complement ? (ev.total - ev.favorable) : ev.favorable;
+    return { kind: 'simple', ev: ev, complement: complement, answer: R(fav, ev.total) };
+  }
+  function genPSR3_compound() {
+    var ev1 = genPSR3Event(), ev2 = genPSR3Event();
+    return { kind: 'compound', ev1: ev1, ev2: ev2, answer: R(ev1.favorable * ev2.favorable, ev1.total * ev2.total) };
+  }
+  function genPSR3(mode) {
+    var kind = mode === 'mixed' ? pick(['simple', 'compound']) : mode;
+    return kind === 'simple' ? genPSR3_simple() : genPSR3_compound();
+  }
+  function contentsLine(ev) {
+    return ev.container.items.map(function (name, i) { return ev.counts[i] + ' ' + name; }).join(', ') +
+      ' (' + ev.total + ' ' + ev.container.unit + 's total)';
+  }
+  function PSR3Prompt(p) {
+    if (p.kind === 'simple') {
+      var ev = p.ev;
+      return '<div class="qQuestion">A ' + ev.container.name + ' contains: ' + contentsLine(ev) + '.</div>' +
+        '<div class="qQuestion" style="margin-top:8px">If one is chosen at random, what is the probability that it is ' +
+        (p.complement ? '<b>NOT</b> ' : '') + '<b style="color:var(--accent)">' + ev.container.items[ev.targetIdx] + '</b>? Give your answer as a fraction.</div>';
+    }
+    var e1 = p.ev1, e2 = p.ev2;
+    return '<div class="qQuestion">Two independent draws are made, each with replacement:</div>' +
+      '<div style="margin-top:4px"><b>Draw 1</b> \u2014 a ' + e1.container.name + ' contains: ' + contentsLine(e1) + '.</div>' +
+      '<div style="margin-top:4px"><b>Draw 2</b> \u2014 a ' + e2.container.name + ' contains: ' + contentsLine(e2) + '.</div>' +
+      '<div class="qQuestion" style="margin-top:10px">What is the probability of getting <b style="color:var(--accent)">' + e1.container.items[e1.targetIdx] + '</b> on Draw 1 <b>and</b> <b style="color:var(--accent)">' + e2.container.items[e2.targetIdx] + '</b> on Draw 2? Give your answer as a fraction.</div>';
+  }
+  function PSR3AnswerHTML(p) { return '<span class="ansLabel">P =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="probability, as a fraction">' + sharedKbdHTML(); }
+  function PSR3Check(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
+  function PSR3Hints(p) {
+    if (p.kind === 'simple') return '<p>Probability = favorable outcomes \u00f7 total outcomes. ' + (p.complement ? 'For \u201cNOT\u201d, subtract the favorable count from the total first.' : '') + '</p>';
+    return '<p>For two independent events, multiply their individual probabilities: P(A and B) = P(A) \u00d7 P(B).</p>';
+  }
+  function PSR3Steps(p) {
+    if (p.kind === 'simple') {
+      var ev = p.ev;
+      var fav = p.complement ? (ev.total - ev.favorable) : ev.favorable;
+      var lines = [];
+      if (p.complement) lines.push('NOT ' + ev.container.items[ev.targetIdx] + ' = ' + ev.total + ' \u2212 ' + ev.favorable + ' = ' + fav + ' favorable ' + ev.container.unit + 's');
+      else lines.push('Favorable ' + ev.container.unit + 's: ' + fav);
+      lines.push('Total ' + ev.container.unit + 's: ' + ev.total);
+      lines.push('P = ' + fav + '/' + ev.total + (p.answer.d === ev.total ? '' : ' = ' + fracHTML(p.answer.n, p.answer.d) + ' (simplified)'));
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    var e1 = p.ev1, e2 = p.ev2;
+    return '<ol class="stepList">' +
+      '<li>P(Draw 1) = ' + e1.favorable + '/' + e1.total + '</li>' +
+      '<li>P(Draw 2) = ' + e2.favorable + '/' + e2.total + '</li>' +
+      '<li>P(both) = (' + e1.favorable + '/' + e1.total + ') \u00d7 (' + e2.favorable + '/' + e2.total + ') = ' + (e1.favorable * e2.favorable) + '/' + (e1.total * e2.total) + ' = ' + fracHTML(p.answer.n, p.answer.d) + ' (simplified)</li></ol>';
+  }
+  
+  /* =====================================================================
+     PSR.4 — Compute and describe measures of center and spread of data.
+     ===================================================================== */
+  function genModeData() {
+    var n = ri(7, 10);
+    var modeVal = ri(1, 15);
+    var modeCount = ri(2, 3);
+    var data = [];
+    for (var i = 0; i < modeCount; i++) data.push(modeVal);
+    var otherPoolCount = {};
+    var guard = 0;
+    while (data.length < n && guard < 500) {
+      guard++;
+      var v = ri(1, 15);
+      if (v === modeVal) continue;
+      var cur = otherPoolCount[v] || 0;
+      if (cur >= modeCount - 1) continue;
+      otherPoolCount[v] = cur + 1;
+      data.push(v);
+    }
+    return { data: shuffle(data), modeVal: modeVal, modeCount: modeCount };
+  }
+  function genPSR4(mode) {
+    var statKind = mode === 'mixed' ? pick(['mean', 'median', 'mode', 'range']) : mode;
+    if (statKind === 'mode') {
+      var md = genModeData();
+      return { kind: 'mode', data: md.data, modeVal: md.modeVal, modeCount: md.modeCount, answer: R(md.modeVal, 1) };
+    }
+    var n = ri(5, 9);
+    var data = [];
+    for (var i = 0; i < n; i++) data.push(ri(1, 20));
+    var sorted = data.slice().sort(function (a, b) { return a - b; });
+    var answer;
+    if (statKind === 'mean') {
+      var sum = data.reduce(function (a, b) { return a + b; }, 0);
+      answer = R(sum, n);
+    } else if (statKind === 'median') {
+      if (n % 2 === 1) answer = R(sorted[(n - 1) / 2], 1);
+      else answer = R(sorted[n / 2 - 1] + sorted[n / 2], 2);
+    } else { /* range */
+      answer = R(sorted[n - 1] - sorted[0], 1);
+    }
+    return { kind: statKind, data: data, sorted: sorted, n: n, answer: answer };
+  }
+  var PSR4_LABEL = { mean: 'mean (average)', median: 'median', mode: 'mode', range: 'range' };
+  function PSR4Prompt(p) {
+    return '<div class="qQuestion">Find the ' + PSR4_LABEL[p.kind] + ' of this data set:</div>' +
+      '<div class="eqLine">' + p.data.join(', ') + '</div>';
+  }
+  function PSR4AnswerHTML(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML(); }
+  function PSR4Check(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
+  function PSR4Hints(p) {
+    if (p.kind === 'mean') return '<p>Add up every value, then divide by how many values there are.</p>';
+    if (p.kind === 'median') return '<p>Put the values in order first. With an even count, average the two middle values.</p>';
+    if (p.kind === 'mode') return '<p>The mode is whichever value shows up most often \u2014 count how many times each value appears.</p>';
+    return '<p>Range = largest value \u2212 smallest value.</p>';
+  }
+  function PSR4Steps(p) {
+    if (p.kind === 'mean') {
+      var sum = p.data.reduce(function (a, b) { return a + b; }, 0);
+      var decStr = ratToDecimalStr(p.answer);
+      return '<ol class="stepList"><li>Sum: ' + p.data.join(' + ') + ' = ' + sum + '</li>' +
+        '<li>Count: ' + p.n + ' values</li>' +
+        '<li>Mean = ' + sum + ' \u00f7 ' + p.n + ' = ' + (p.answer.d === 1 ? p.answer.n : (decStr !== null ? decStr : fracHTML(p.answer.n, p.answer.d))) + '</li></ol>';
+    }
+    if (p.kind === 'median') {
+      var mid = p.n % 2 === 1 ?
+        ('Middle value (position ' + ((p.n + 1) / 2) + '): ' + p.sorted[(p.n - 1) / 2]) :
+        ('Average the two middle values: (' + p.sorted[p.n / 2 - 1] + ' + ' + p.sorted[p.n / 2] + ') \u00f7 2 = ' + (p.answer.d === 1 ? p.answer.n : ratToDecimalStr(p.answer)));
+      return '<ol class="stepList"><li>Sorted: ' + p.sorted.join(', ') + '</li><li>' + mid + '</li></ol>';
+    }
+    if (p.kind === 'mode') {
+      return '<ol class="stepList"><li>' + p.modeVal + ' appears ' + p.modeCount + ' times \u2014 more than any other value.</li></ol>';
+    }
+    return '<ol class="stepList"><li>Max = ' + p.sorted[p.n - 1] + ', Min = ' + p.sorted[0] + '</li>' +
+      '<li>Range = ' + p.sorted[p.n - 1] + ' \u2212 ' + p.sorted[0] + ' = ' + p.answer.n + '</li></ol>';
+  }
+  
+  /* =====================================================================
+     PSR.5 — Classify data and construct appropriate representations of data.
+     ===================================================================== */
+  var CLASSIFY_SCENARIOS = [
+    { desc: 'A survey asked 30 people to name their favorite ice cream flavor out of 5 choices.', correct: 'bar', reason: 'The categories (flavors) aren\u2019t numeric, so a bar graph comparing counts per category fits best.' },
+    { desc: 'A school recorded the exact number of minutes 40 students spent on homework last night, to see the overall shape of the distribution.', correct: 'histogram', reason: 'This is a single numeric variable grouped into ranges \u2014 a histogram shows the distribution\u2019s shape.' },
+    { desc: 'A coach wants to compare the spread (minimum, quartiles, and maximum) of race times between two different teams.', correct: 'box', reason: 'A box plot summarizes the five-number summary and makes spread easy to compare between groups.' },
+    { desc: 'A scientist recorded both the temperature and the number of ice cream cones sold on 35 different days, to see if the two are related.', correct: 'scatter', reason: 'Two numeric variables measured together, looking for a relationship, call for a scatter plot.' },
+    { desc: 'A store manager tallied how many customers paid with cash, credit, or mobile pay this week.', correct: 'bar', reason: 'Payment method is categorical \u2014 a bar graph compares the count for each category.' },
+    { desc: 'A biologist measured the exact wingspan (in mm) of 60 butterflies to study how the measurements are distributed.', correct: 'histogram', reason: 'A single continuous numeric variable across many individuals \u2014 a histogram reveals the distribution\u2019s shape.' },
+    { desc: 'A teacher wants to compare test-score spread between first period and second period using minimum, quartiles, and maximum.', correct: 'box', reason: 'Comparing five-number summaries between two groups is exactly what a box plot is built for.' },
+    { desc: 'A researcher recorded hours studied and exam score for 50 students to look for a relationship between the two.', correct: 'scatter', reason: 'Two related numeric variables, checking for a relationship \u2014 a scatter plot is the right tool.' },
+    { desc: 'A city recorded how many residents live in each of 6 different neighborhoods.', correct: 'bar', reason: 'Neighborhood is a category, so a bar graph comparing populations fits.' },
+    { desc: 'A nurse recorded the exact resting heart rate (in bpm) of 45 patients to see the overall distribution.', correct: 'histogram', reason: 'A single numeric measurement across many patients \u2014 a histogram shows how the values are distributed.' },
+    { desc: 'An analyst wants to see whether advertising spend and monthly sales are related, using data from 25 months.', correct: 'scatter', reason: 'Two numeric variables being checked for a relationship call for a scatter plot.' },
+    { desc: 'A manager wants to compare delivery-time spread (min, quartiles, max) across three different drivers.', correct: 'box', reason: 'Comparing five-number summaries across multiple groups is what a box plot is for.' }
+  ];
+  var CLASSIFY_OPTIONS = [
+    { v: 'bar', label: 'Bar Graph' }, { v: 'histogram', label: 'Histogram' },
+    { v: 'box', label: 'Box Plot' }, { v: 'scatter', label: 'Scatter Plot' }
+  ];
+  function genPSR5_classify() {
+    var scenario = pick(CLASSIFY_SCENARIOS);
+    return { kind: 'classify', scenario: scenario, answer: scenario.correct };
+  }
+  function genPSR5_read() {
+    var rep = pick(['box', 'dot']);
+    if (rep === 'box') {
+      var min = ri(1, 8), q1 = min + ri(2, 4), median = q1 + ri(1, 3), q3 = median + ri(1, 4), max = q3 + ri(2, 4);
+      var summary = { min: min, q1: q1, median: median, q3: q3, max: max };
+      var ask = pick(['min', 'q1', 'median', 'q3', 'max', 'range', 'iqr']);
+      var val = ask === 'range' ? (max - min) : ask === 'iqr' ? (q3 - q1) : summary[ask];
+      return { kind: 'read', rep: 'box', summary: summary, ask: ask, lo: min - 1, hi: max + 1, answer: R(val, 1) };
+    }
+    var base = ri(1, 8);
+    var lo = base, hi = base + 7;
+    var n = ri(8, 12);
+    var values = [];
+    for (var i = 0; i < n; i++) values.push(ri(lo, hi));
+    var ask = pick(['atLeast', 'atMost', 'exactly']);
+    var answer, threshold, target;
+    if (ask === 'exactly') { target = pick(values); answer = values.filter(function (v) { return v === target; }).length; }
+    else if (ask === 'atLeast') { threshold = ri(lo, hi - 1); answer = values.filter(function (v) { return v >= threshold; }).length; }
+    else { threshold = ri(lo + 1, hi); answer = values.filter(function (v) { return v <= threshold; }).length; }
+    return { kind: 'read', rep: 'dot', values: values, lo: lo - 1, hi: hi + 1, ask: ask, threshold: threshold, target: target, answer: R(answer, 1) };
+  }
+  function genPSR5(mode) {
+    var kind = mode === 'mixed' ? pick(['classify', 'read']) : mode;
+    return kind === 'classify' ? genPSR5_classify() : genPSR5_read();
+  }
+  var BOX_ASK_LABEL = { min: 'minimum', q1: 'first quartile (Q1)', median: 'median', q3: 'third quartile (Q3)', max: 'maximum', range: 'range', iqr: 'interquartile range (IQR = Q3 \u2212 Q1)' };
+  function PSR5Prompt(p) {
+    if (p.kind === 'classify') {
+      return '<div class="qQuestion">' + p.scenario.desc + '</div>' +
+        '<div class="qQuestion" style="margin-top:8px">Which representation fits this situation best?</div>';
+    }
+    if (p.rep === 'box') {
+      return '<div class="qQuestion">The box plot below summarizes a data set.</div>' +
+        boxPlotSVG(p.summary, p.lo, p.hi) +
+        '<div class="qQuestion" style="margin-top:10px">What is the ' + BOX_ASK_LABEL[p.ask] + '?</div>';
+    }
+    var askText = p.ask === 'exactly' ? ('exactly <b>' + p.target + '</b>') :
+      p.ask === 'atLeast' ? ('at least <b>' + p.threshold + '</b>') : ('at most <b>' + p.threshold + '</b>');
+    return '<div class="qQuestion">The dot plot below shows a data set.</div>' +
+      dotPlotSVG(p.values, p.lo, p.hi) +
+      '<div class="qQuestion" style="margin-top:10px">How many data points have a value of ' + askText + '?</div>';
+  }
+  function PSR5AnswerHTML(p) {
+    if (p.kind === 'classify') return choiceNHTML('psr5Choice', CLASSIFY_OPTIONS);
+    return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="numeric" autocomplete="off" aria-label="answer">' + sharedKbdHTML();
+  }
+  function PSR5Check(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'classify') return ans.c === p.answer;
+    var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer);
+  }
+  function PSR5Hints(p) {
+    if (p.kind === 'classify') return '<p>Ask: is the data grouped into categories (bar), a single numeric variable\u2019s shape (histogram), a five-number summary to compare (box plot), or two related numeric variables (scatter plot)?</p>';
+    if (p.rep === 'box') return '<p>On a box plot: the left whisker end is the minimum, the left box edge is Q1, the line inside the box is the median, the right box edge is Q3, and the right whisker end is the maximum.</p>';
+    return '<p>Count the dots stacked above each qualifying value on the number line.</p>';
+  }
+  function PSR5Steps(p) {
+    if (p.kind === 'classify') return '<ol class="stepList"><li>' + p.scenario.reason + '</li></ol>';
+    if (p.rep === 'box') {
+      var s = p.summary;
+      return '<ol class="stepList"><li>Five-number summary: min=' + s.min + ', Q1=' + s.q1 + ', median=' + s.median + ', Q3=' + s.q3 + ', max=' + s.max + '</li>' +
+        '<li>' + BOX_ASK_LABEL[p.ask] + ' = ' + p.answer.n + '</li></ol>';
+    }
+    var sorted = p.values.slice().sort(function (a, b) { return a - b; });
+    return '<ol class="stepList"><li>Values sorted: ' + sorted.join(', ') + '</li>' +
+      '<li>Count matching \u201c' + (p.ask === 'exactly' ? ('exactly ' + p.target) : p.ask === 'atLeast' ? ('at least ' + p.threshold) : ('at most ' + p.threshold)) + '\u201d: ' + p.answer.n + '</li></ol>';
+  }
+  
+  /* =====================================================================
+     PSR.6 — Analyze, interpret, and draw conclusions from data.
+     ===================================================================== */
+  /* Pearson correlation coefficient, computed from exact-integer sums
+     (n*Sxy-Sx*Sy over sqrt((n*Sxx-Sx*Sx)*(n*Syy-Sy*Sy)) — the standard
+     sum-of-squares identity, so the only float operation is the final
+     sqrt/division used to ACCEPT/REJECT a candidate dataset during
+     generation, never to compute a graded value — same "floats OK for a
+     generation-time filter, never for the answer itself" rule QR.4 uses
+     for its 0.05 comparison margin. An earlier draft normalized by raw
+     sqrt(Sx^2)*sqrt(Sy^2) (not mean-centered) instead of the proper
+     sum-of-squared-deviations form below; that made the ratio's ceiling
+     sit around ~0.25 regardless of how strong the true trend was,
+     making the 'positive' threshold unreachable within the retry bound
+     — caught by the standalone sweep (Part 7), not by inspection. */
+  function pearsonR(xs, ys) {
+    var n = xs.length, Sx = 0, Sy = 0, Sxy = 0, Sxx = 0, Syy = 0;
+    for (var k = 0; k < n; k++) { Sx += xs[k]; Sy += ys[k]; Sxy += xs[k] * ys[k]; Sxx += xs[k] * xs[k]; Syy += ys[k] * ys[k]; }
+    var cross = n * Sxy - Sx * Sy;
+    var varX = n * Sxx - Sx * Sx, varY = n * Syy - Sy * Sy;
+    var denom = Math.sqrt(varX * varY);
+    return denom === 0 ? 0 : cross / denom;
+  }
+  function buildAssoc(trendType) {
+    var xs = [], ys = [];
+    var POS_THRESH = 0.55, NONE_THRESH = 0.2;
+    for (var attempt = 0; attempt < 60; attempt++) {
+      var n = ri(8, 12);
+      xs = []; ys = [];
+      for (var i = 1; i <= n; i++) xs.push(i);
+      var b = ri(3, 8);
+      if (trendType === 'positive' || trendType === 'negative') {
+        var a = trendType === 'positive' ? ri(1, 3) : -ri(1, 3);
+        xs.forEach(function (x) { ys.push(Math.max(1, a * x + b + ri(-2, 2))); });
+      } else {
+        xs.forEach(function () { ys.push(ri(1, 2 * b + 6)); });
+      }
+      var r = pearsonR(xs, ys);
+      if (trendType === 'positive' && r > POS_THRESH) break;
+      if (trendType === 'negative' && r < -POS_THRESH) break;
+      if (trendType === 'none' && Math.abs(r) < NONE_THRESH) break;
+    }
+    var points = xs.map(function (x, i) { return { x: x, y: ys[i] }; });
+    return points;
+  }
+  function genPSR6_association() {
+    var trend = pick(['positive', 'negative', 'none']);
+    var points = buildAssoc(trend);
+    return { kind: 'association', points: points, answer: trend };
+  }
+  var ASSOC_OPTIONS = [{ v: 'positive', label: 'Positive' }, { v: 'negative', label: 'Negative' }, { v: 'none', label: 'No Association' }];
+  function genPSR6_conclusion() {
+    var d = generateCategoricalData();
+    var ask = pick(['total', 'fraction', 'mostLeast']);
+    if (ask === 'total') return { kind: 'conclusion', ask: ask, d: d, answer: R(d.total, 1) };
+    if (ask === 'fraction') {
+      var ti = ri(0, d.items.length - 1);
+      return { kind: 'conclusion', ask: ask, d: d, targetIdx: ti, answer: R(d.counts[ti], d.total) };
+    }
+    var variant = pick(['most', 'least']);
+    var val = variant === 'most' ? Math.max.apply(null, d.counts) : Math.min.apply(null, d.counts);
+    var ti2 = d.counts.indexOf(val);
+    return { kind: 'conclusion', ask: ask, variant: variant, d: d, targetIdx: ti2, answer: String(ti2) };
+  }
+  function genPSR6(mode) {
+    var kind = mode === 'mixed' ? pick(['association', 'conclusion']) : mode;
+    return kind === 'association' ? genPSR6_association() : genPSR6_conclusion();
+  }
+  function PSR6Prompt(p) {
+    if (p.kind === 'association') {
+      return '<div class="qQuestion">The scatter plot below shows two related measurements.</div>' +
+        scatterSVG(p.points) +
+        '<div class="qQuestion" style="margin-top:10px">What kind of association does the data show?</div>';
+    }
+    var d = p.d;
+    var chart = barChartSVG(d.items, d.counts);
+    if (p.ask === 'total') return '<div class="qQuestion">The graph shows survey results about ' + d.ctx.noun + '.</div>' + chart + '<div class="qQuestion" style="margin-top:10px">How many total responses are shown?</div>';
+    if (p.ask === 'fraction') return '<div class="qQuestion">The graph shows survey results about ' + d.ctx.noun + '.</div>' + chart + '<div class="qQuestion" style="margin-top:10px">Based on the data, what is the probability that a randomly selected respondent chose <b style="color:var(--accent)">' + d.items[p.targetIdx] + '</b>? Give your answer as a fraction of the total.</div>';
+    return '<div class="qQuestion">The graph shows survey results about ' + d.ctx.noun + '.</div>' + chart + '<div class="qQuestion" style="margin-top:10px">Which choice received the ' + (p.variant === 'most' ? 'most' : 'fewest') + ' responses?</div>';
+  }
+  function PSR6AnswerHTML(p) {
+    if (p.kind === 'conclusion' && p.ask === 'mostLeast') {
+      var opts = p.d.items.map(function (name, i) { return { v: String(i), label: name }; });
+      return choiceNHTML('psr6Choice', opts);
+    }
+    if (p.kind === 'association') return choiceNHTML('psr6Choice', ASSOC_OPTIONS);
+    return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML();
+  }
+  function PSR6Check(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'association') return ans.c === p.answer;
+    if (p.ask === 'mostLeast') return ans.c === p.answer;
+    var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer);
+  }
+  function PSR6Hints(p) {
+    if (p.kind === 'association') return '<p>As you scan left to right: do the points trend upward (positive), downward (negative), or show no consistent pattern (none)?</p>';
+    if (p.ask === 'total') return '<p>Add up the height of every bar.</p>';
+    if (p.ask === 'fraction') return '<p>Probability = count for that choice \u00f7 total responses.</p>';
+    return '<p>Compare the height of every bar to find the ' + (p.variant === 'most' ? 'tallest' : 'shortest') + ' one.</p>';
+  }
+  function PSR6Steps(p) {
+    if (p.kind === 'association') {
+      var label = p.answer === 'positive' ? 'trends upward (positive association)' : p.answer === 'negative' ? 'trends downward (negative association)' : 'shows no consistent pattern (no association)';
+      return '<ol class="stepList"><li>Scanning left to right, the data ' + label + '.</li></ol>';
+    }
+    var d = p.d;
+    if (p.ask === 'total') return '<ol class="stepList"><li>' + d.counts.join(' + ') + ' = ' + d.total + '</li></ol>';
+    if (p.ask === 'fraction') return '<ol class="stepList"><li>' + d.items[p.targetIdx] + ' count = ' + d.counts[p.targetIdx] + ', total = ' + d.total + '</li><li>P = ' + d.counts[p.targetIdx] + '/' + d.total + ' = ' + fracHTML(p.answer.n, p.answer.d) + ' (simplified)</li></ol>';
+    return '<ol class="stepList"><li>' + d.items.map(function (name, i) { return name + ': ' + d.counts[i]; }).join(', ') + '</li>' +
+      '<li>' + (p.variant === 'most' ? 'Highest' : 'Lowest') + ' count is ' + d.items[p.targetIdx] + '.</li></ol>';
+  }
+
+  /* =====================================================================
+     Per-standard TYPE state + DOM read() functions. Every standard here
+     uses a plain input+keyboard control EXCEPT PSR.5's classify kind and
+     PSR.6's association/mostLeast kinds, which use the new choiceN
+     control — same "switch control by p.kind within one STD entry"
+     pattern QR.7 established for its interpretMeaning kind.
+     ===================================================================== */
+  var PSR1_curType = 'mixed', PSR2_curType = 'mixed', PSR3_curType = 'mixed',
+      PSR4_curType = 'mixed', PSR5_curType = 'mixed', PSR6_curType = 'mixed';
+  var PSR5_selChoice = null, PSR6_selChoice = null;
+
+  function readPlainInput() {
+    var el = document.getElementById('ans_x');
+    var v = el ? el.value.trim() : '';
+    if (v === '') return null;
+    return { x: v };
+  }
+  function PSR1Read(p) { return readPlainInput(); }
+  function PSR2Read(p) { return readPlainInput(); }
+  function PSR3Read(p) { return readPlainInput(); }
+  function PSR4Read(p) { return readPlainInput(); }
+  function PSR5Read(p) {
+    if (p.kind === 'classify') return PSR5_selChoice ? { c: PSR5_selChoice } : null;
+    return readPlainInput();
+  }
+  function PSR6Read(p) {
+    if (p.kind === 'association' || (p.kind === 'conclusion' && p.ask === 'mostLeast')) {
+      return PSR6_selChoice ? { c: PSR6_selChoice } : null;
+    }
+    return readPlainInput();
+  }
+
+  /* =====================================================================
+     STUBS registry — one entry per standard, full Part 1 SE contract.
+     ===================================================================== */
   var STUBS = {
-    // 'PSR.5': { gen: function(){...}, prompt: function(p){...},
-    //            check: function(p, ans){...}, steps: function(p){...} }
+    'PSR.1': {
+      gen: function () { return genPSR1(PSR1_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('psr1TypeSel', PSR1_curType, [['mixed', 'Mixed'], ['tally', 'Tally'], ['order', 'Order']]); },
+      prompt: function (p) { return PSR1Prompt(p); },
+      answerHTML: function (p) { return PSR1AnswerHTML(p); },
+      read: function (p) { return PSR1Read(p); },
+      check: function (p, ans) { return PSR1Check(p, ans); },
+      hints: function (p) { return PSR1Hints(p); },
+      steps: function (p) { return PSR1Steps(p); },
+      init: function () { wireSeg('psr1TypeSel', PSR1_curType, function (v) { PSR1_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'PSR.2': {
+      gen: function () { return genPSR2(PSR2_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('psr2TypeSel', PSR2_curType, [['mixed', 'Mixed'], ['table', 'Table'], ['bar', 'Bar Graph']]); },
+      prompt: function (p) { return PSR2Prompt(p); },
+      answerHTML: function (p) { return PSR2AnswerHTML(p); },
+      read: function (p) { return PSR2Read(p); },
+      check: function (p, ans) { return PSR2Check(p, ans); },
+      hints: function (p) { return PSR2Hints(p); },
+      steps: function (p) { return PSR2Steps(p); },
+      init: function () { wireSeg('psr2TypeSel', PSR2_curType, function (v) { PSR2_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'PSR.3': {
+      gen: function () { return genPSR3(PSR3_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('psr3TypeSel', PSR3_curType, [['mixed', 'Mixed'], ['simple', 'Single Event'], ['compound', 'Compound Event']]); },
+      prompt: function (p) { return PSR3Prompt(p); },
+      answerHTML: function (p) { return PSR3AnswerHTML(p); },
+      read: function (p) { return PSR3Read(p); },
+      check: function (p, ans) { return PSR3Check(p, ans); },
+      hints: function (p) { return PSR3Hints(p); },
+      steps: function (p) { return PSR3Steps(p); },
+      init: function () { wireSeg('psr3TypeSel', PSR3_curType, function (v) { PSR3_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your probability as a fraction before checking.'
+    },
+    'PSR.4': {
+      gen: function () { return genPSR4(PSR4_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('psr4TypeSel', PSR4_curType, [['mixed', 'Mixed'], ['mean', 'Mean'], ['median', 'Median'], ['mode', 'Mode'], ['range', 'Range']]); },
+      prompt: function (p) { return PSR4Prompt(p); },
+      answerHTML: function (p) { return PSR4AnswerHTML(p); },
+      read: function (p) { return PSR4Read(p); },
+      check: function (p, ans) { return PSR4Check(p, ans); },
+      hints: function (p) { return PSR4Hints(p); },
+      steps: function (p) { return PSR4Steps(p); },
+      init: function () { wireSeg('psr4TypeSel', PSR4_curType, function (v) { PSR4_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'PSR.5': {
+      gen: function () { PSR5_selChoice = null; return genPSR5(PSR5_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('psr5TypeSel', PSR5_curType, [['mixed', 'Mixed'], ['classify', 'Classify'], ['read', 'Read a Graph']]); },
+      prompt: function (p) { return PSR5Prompt(p); },
+      answerHTML: function (p) { return PSR5AnswerHTML(p); },
+      read: function (p) { return PSR5Read(p); },
+      check: function (p, ans) { return PSR5Check(p, ans); },
+      hints: function (p) { return PSR5Hints(p); },
+      steps: function (p) { return PSR5Steps(p); },
+      init: function (p) {
+        wireSeg('psr5TypeSel', PSR5_curType, function (v) { PSR5_curType = v; renderCard(); });
+        if (p.kind === 'classify') wireChoiceN('psr5Choice', function (c) { PSR5_selChoice = c; });
+        else wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) {
+        if (p.kind === 'classify') revealChoiceN('psr5Choice', p.answer);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Choose or enter an answer before checking.'
+    },
+    'PSR.6': {
+      gen: function () { PSR6_selChoice = null; return genPSR6(PSR6_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('psr6TypeSel', PSR6_curType, [['mixed', 'Mixed'], ['association', 'Association'], ['conclusion', 'Draw a Conclusion']]); },
+      prompt: function (p) { return PSR6Prompt(p); },
+      answerHTML: function (p) { return PSR6AnswerHTML(p); },
+      read: function (p) { return PSR6Read(p); },
+      check: function (p, ans) { return PSR6Check(p, ans); },
+      hints: function (p) { return PSR6Hints(p); },
+      steps: function (p) { return PSR6Steps(p); },
+      init: function (p) {
+        var isChoice = (p.kind === 'association') || (p.kind === 'conclusion' && p.ask === 'mostLeast');
+        wireSeg('psr6TypeSel', PSR6_curType, function (v) { PSR6_curType = v; renderCard(); });
+        if (isChoice) wireChoiceN('psr6Choice', function (c) { PSR6_selChoice = c; });
+        else wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) {
+        var isChoice = (p.kind === 'association') || (p.kind === 'conclusion' && p.ask === 'mostLeast');
+        if (isChoice) revealChoiceN('psr6Choice', p.answer);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Choose or enter an answer before checking.'
+    }
   };
 
   var STANDARDS = TSIPortal.REGISTRY.filter(function(r){ return r.sec === SECTION_ID; });
@@ -60,6 +1031,14 @@
     });
   }
 
+  /* ---------------------------------------------------------------------
+     renderCard — the standing controller (Part 0.3), unchanged from
+     apps/tsi-ar.html. Drives whichever SE is selected via the full Part 1
+     contract: gen -> prompt/answerHTML -> (user answers) -> read -> check
+     -> record -> reveal, with hints/steps available on demand and the
+     Session-2 hint/steps credit-integrity split (a correct answer after
+     Show Steps doesn't count toward mastery).
+     --------------------------------------------------------------------- */
   function renderCard(){
     var r = STANDARDS[cur];
     $('#curCode').textContent = r.code;
@@ -81,24 +1060,82 @@
     }
 
     var p = stub.gen();
+    var controls = stub.controlsHTML ? stub.controlsHTML(p) : '';
+    var hasSteps = !!stub.steps;
     $('#card').innerHTML =
       '<span class="seCode">'+r.code+'</span>' +
       '<div class="seName">'+r.name+'</div>' +
+      controls +
       '<div class="promptArea" id="promptArea">'+stub.prompt(p)+'</div>' +
-      '<div class="actionRow">' +
+      '<div class="answerArea" id="answerArea">'+stub.answerHTML(p)+'</div>' +
+      '<div class="fbMsg" id="fbMsg" aria-live="polite"></div>' +
+      '<div class="actionRow" id="actionRow">' +
         '<button class="btn primary" id="checkBtn">Check</button>' +
-        '<button class="btn" id="hintBtn">Hint</button>' +
+        (stub.hints ? '<button class="btn" id="hintBtn">Hint</button>' : '') +
+        (hasSteps ? '<button class="btn" id="stepsBtn" title="Shows the full solution \u2014 a correct answer after this won\u2019t count toward mastery">Show steps</button>' : '') +
       '</div>' +
+      (hasSteps ? '<div class="stepsNote">Hint gives you a nudge without the answer. Show steps walks through the full solution \u2014 use it if you\u2019re stuck, but a correct answer afterward won\u2019t count toward mastery.</div>' : '') +
       '<div class="hintPanel" id="hintPanel"></div>';
 
-    $('#checkBtn').addEventListener('click', function(){
-      var ans = $('#promptArea').querySelector('input') ? $('#promptArea').querySelector('input').value : '';
-      var correct = stub.check(p, ans);
-      TSIPortal.record(r.id, correct, { level: 1 });
-      renderCard();
-    });
-    $('#hintBtn').addEventListener('click', function(){
+    if (stub.init) stub.init(p);
+
+    var hintLogged = false;
+    var stepsRevealed = false;
+
+    function logHintUse(){
+      if (hintLogged) return;
+      hintLogged = true;
       TSIPortal.hint(r.id);
+    }
+
+    $('#checkBtn').addEventListener('click', function(){
+      var ans = stub.read ? stub.read(p) : null;
+      var fb = $('#fbMsg');
+      if (ans === null){
+        fb.textContent = stub.emptyMsg || 'Please enter an answer.';
+        fb.className = 'fbMsg warn';
+        return;
+      }
+      closeKeyboards();
+      var trueCorrect = stub.check(p, ans);
+      var countedCorrect = trueCorrect && !stepsRevealed;
+      TSIPortal.record(r.id, countedCorrect, { level: 1 });
+      if (trueCorrect && stepsRevealed){
+        fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
+        fb.className = 'fbMsg warn';
+      } else if (trueCorrect){
+        fb.textContent = 'Correct! \u2713';
+        fb.className = 'fbMsg ok';
+      } else {
+        fb.textContent = 'Not quite \u2014 see the steps below.';
+        fb.className = 'fbMsg err';
+      }
+      document.querySelectorAll('#answerArea input, #answerArea button').forEach(function(el){ el.disabled = true; });
+      $('#checkBtn').disabled = true;
+      if (stub.reveal) stub.reveal(p, trueCorrect);
+      var nextBtn = document.createElement('button');
+      nextBtn.type = 'button'; nextBtn.className = 'btn primary'; nextBtn.id = 'nextBtn';
+      nextBtn.textContent = 'Next problem \u2192';
+      nextBtn.addEventListener('click', renderCard);
+      $('#actionRow').appendChild(nextBtn);
+      if (!trueCorrect && hasSteps){
+        stepsRevealed = true;
+        var panel = $('#hintPanel');
+        panel.innerHTML = stub.steps(p);
+        panel.classList.add('show');
+      }
+    });
+    var hintBtnEl = $('#hintBtn');
+    if (hintBtnEl) hintBtnEl.addEventListener('click', function(){
+      logHintUse();
+      var panel = $('#hintPanel');
+      panel.innerHTML = stub.hints(p);
+      panel.classList.add('show');
+    });
+    var stepsBtnEl = $('#stepsBtn');
+    if (stepsBtnEl) stepsBtnEl.addEventListener('click', function(){
+      logHintUse();
+      stepsRevealed = true;
       var panel = $('#hintPanel');
       panel.innerHTML = stub.steps(p);
       panel.classList.add('show');
