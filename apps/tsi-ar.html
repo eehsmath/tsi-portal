@@ -84,6 +84,7 @@
   function ri(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
   function nonZero(lo, hi) { var v; do { v = ri(lo, hi); } while (v === 0); return v; }
   function pick(arr) { return arr[ri(0, arr.length - 1)]; }
+  function ipow(base, exp) { var r = 1; for (var i = 0; i < exp; i++) r *= base; return r; }
 
   /* ---------------- Part 2.1: shared floating keyboard ---------------- */
   var SHARED_KEYS = ['0','1','2','3','4','5','6','7','8','9','/','\u2212','.'];
@@ -401,8 +402,11 @@
       'then add or subtract the equations to eliminate that variable.</p>';
   }
 
+  function stdTypeSelHTML(selId, curType, options) {
+    return segWrap('Type', selId, curType, options);
+  }
   function typeSelHTML() {
-    return segWrap('Type', 'ar1TypeSel', AR1_curType, [
+    return stdTypeSelHTML('ar1TypeSel', AR1_curType, [
       ['mixed', 'Mixed'], ['eq', 'Equations'], ['ineq', 'Inequalities'], ['sys', 'Systems']
     ]);
   }
@@ -415,6 +419,514 @@
         b.classList.add('sel');
       });
     });
+  }
+
+  function genericReveal(correct) {
+    document.querySelectorAll('#answerArea input.in').forEach(function (el) { el.classList.add(correct ? 'right' : 'wrong'); });
+  }
+
+  /* =====================================================================
+     AR.2 — Evaluate linear functions.
+     ===================================================================== */
+  var AR2_curType = 'mixed';
+
+  function genAR2_fromEquation() {
+    var m = nonZero(-9, 9), b = ri(-12, 12), a = ri(-9, 9);
+    return { kind: 'fromEquation', m: m, b: b, a: a, fx: m * a + b };
+  }
+  function genAR2_fromTable() {
+    var m = nonZero(-6, 6), b = ri(-10, 10), x0 = ri(-4, 4);
+    var xs = [x0, x0 + 1, x0 + 2, x0 + 3];
+    var ys = xs.map(function (x) { return m * x + b; });
+    return { kind: 'fromTable', m: m, b: b, xs: xs, ys: ys, answer: ys[3] };
+  }
+  function genAR2_findInput() {
+    var m = nonZero(-9, 9), b = ri(-12, 12), x0 = ri(-9, 9);
+    return { kind: 'findInput', m: m, b: b, x0: x0, target: m * x0 + b };
+  }
+  function genAR2(mode) {
+    var kind = mode === 'mixed' ? pick(['fromEquation', 'fromTable', 'findInput']) : mode;
+    if (kind === 'fromEquation') return genAR2_fromEquation();
+    if (kind === 'fromTable') return genAR2_fromTable();
+    return genAR2_findInput();
+  }
+
+  function fnHTML(m, b) { return 'f(x) = ' + firstVarTerm(m, 'x') + joinConstInt(b); }
+
+  function AR2PromptDispatch(p) {
+    if (p.kind === 'fromEquation') {
+      return '<div class="qQuestion">' + fnHTML(p.m, p.b) + '</div>' +
+        '<div class="eqLine">Find f(' + fmtInt(p.a) + ').</div>';
+    }
+    if (p.kind === 'fromTable') {
+      var row1 = '<tr><th>x</th>' + p.xs.map(function (x) { return '<td>' + fmtInt(x) + '</td>'; }).join('') + '</tr>';
+      var row2 = '<tr><th>f(x)</th>' + p.ys.map(function (y, i) { return i === 3 ? '<td class="unknown">?</td>' : '<td>' + fmtInt(y) + '</td>'; }).join('') + '</tr>';
+      return '<div class="qQuestion">The table shows values of a linear function. Find the missing value.</div>' +
+        '<table class="ttab">' + row1 + row2 + '</table>';
+    }
+    return '<div class="qQuestion">' + fnHTML(p.m, p.b) + '</div>' +
+      '<div class="eqLine">For what value of x is f(x) = ' + fmtInt(p.target) + '?</div>';
+  }
+
+  function AR2AnswerDispatch(p) {
+    var label = p.kind === 'fromTable' ? 'f(x) =' : (p.kind === 'findInput' ? 'x =' : 'f(' + fmtInt(p.a) + ') =');
+    return '<span class="ansLabel">' + label + '</span>' +
+      '<input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' +
+      sharedKbdHTML();
+  }
+  function AR2ReadDispatch(p) {
+    var el = document.getElementById('ans_x');
+    var v = el ? el.value.trim() : '';
+    if (v === '') return null;
+    return { x: v };
+  }
+  function AR2CheckDispatch(p, ans) {
+    if (!ans) return false;
+    var r = parseRat(ans.x); if (!r) return false;
+    var target = p.kind === 'fromEquation' ? p.fx : (p.kind === 'fromTable' ? p.answer : p.x0);
+    return req(r, R(target, 1));
+  }
+  function AR2HintsDispatch(p) {
+    if (p.kind === 'fromEquation') return '<p>Substitute the given x-value into the equation and evaluate using order of operations.</p>';
+    if (p.kind === 'fromTable') return '<p>Look at how the output changes each time x increases by 1 \u2014 that constant difference is the rate of change. Use it to extend the pattern.</p>';
+    return '<p>Set the function equal to the target value, then solve for x like a linear equation.</p>';
+  }
+  function AR2StepsDispatch(p) {
+    if (p.kind === 'fromEquation') {
+      var lines = [
+        'Substitute x = ' + fmtInt(p.a) + ': f(' + fmtInt(p.a) + ') = ' + firstVarTerm(p.m, '(' + fmtInt(p.a) + ')') + joinConstInt(p.b),
+        '= ' + fmtInt(p.m * p.a) + joinConstInt(p.b),
+        '= ' + fmtInt(p.fx)
+      ];
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'fromTable') {
+      var d = p.ys[1] - p.ys[0];
+      var lines2 = [
+        'Find the common difference: ' + fmtInt(p.ys[1]) + ' ' + MIN + ' (' + fmtInt(p.ys[0]) + ') = ' + fmtInt(d) + ' (each time x goes up by 1, f(x) changes by ' + fmtInt(d) + ')',
+        'Extend the pattern: ' + fmtInt(p.ys[2]) + joinConstInt(d) + ' = ' + fmtInt(p.answer)
+      ];
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    var lines3 = [
+      'Set the function equal to the target: ' + firstVarTerm(p.m, 'x') + joinConstInt(p.b) + ' = ' + fmtInt(p.target),
+      'Subtract ' + fmtInt(p.b) + ' from both sides: ' + fmtInt(p.m) + 'x = ' + fmtInt(p.target - p.b),
+      'Divide by ' + fmtInt(p.m) + ': x = ' + fmtInt(p.target - p.b) + ' / ' + fmtInt(p.m) + ' = ' + fmtInt(p.x0)
+    ];
+    return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     AR.3 — Solve quadratic and exponential relationship problems in
+     context (growth/decay, compound interest, projectile motion).
+     ===================================================================== */
+  var AR3_curType = 'mixed';
+
+  function genAR3_expo() {
+    var isGrowth = Math.random() < 0.5;
+    var moneyContext = Math.random() < 0.5;
+    var P = moneyContext ? ri(5, 200) * 100 : ri(2, 50) * 100;
+    var ratePercent = isGrowth ? ri(2, 12) : ri(5, 25);
+    var r = ratePercent / 100;
+    var t = ri(2, 8);
+    var rawA = P * Math.pow(1 + (isGrowth ? 1 : -1) * r, t);
+    var roundMode = moneyContext ? 'cent' : 'whole';
+    var answer = roundMode === 'cent' ? R(Math.round(rawA * 100 + 1e-9), 100) : R(Math.round(rawA + 1e-9), 1);
+    return { kind: 'expo', isGrowth: isGrowth, moneyContext: moneyContext, P: P, ratePercent: ratePercent, t: t, roundMode: roundMode, rawA: rawA, answer: answer };
+  }
+  function genAR3_compound() {
+    var P = ri(5, 200) * 100;
+    var ratePercent = ri(2, 10);
+    var r = ratePercent / 100;
+    var n = pick([1, 2, 4, 12]);
+    var t = ri(1, 10);
+    var rawA = P * Math.pow(1 + r / n, n * t);
+    var answer = R(Math.round(rawA * 100 + 1e-9), 100);
+    return { kind: 'compound', P: P, ratePercent: ratePercent, n: n, t: t, rawA: rawA, answer: answer };
+  }
+  function genAR3_quad() {
+    var attempts = 0, k, v0, h0, h;
+    do {
+      k = ri(1, 8);
+      v0 = (k % 2 === 0) ? ri(20, 100) : ri(10, 50) * 2;
+      h0 = ri(0, 40);
+      h = -4 * k * k + (v0 * k) / 2 + h0;
+      attempts++;
+    } while (h < 0 && attempts < 50);
+    if (h < 0) { h0 += 200; h = -4 * k * k + (v0 * k) / 2 + h0; }
+    return { kind: 'quad', k: k, tVal: k / 2, v0: v0, h0: h0, answer: h };
+  }
+  function genAR3(mode) {
+    var kind = mode === 'mixed' ? pick(['expo', 'compound', 'quad']) : mode;
+    if (kind === 'expo') return genAR3_expo();
+    if (kind === 'compound') return genAR3_compound();
+    return genAR3_quad();
+  }
+
+  var AR3_EXPO_TEMPLATES = {
+    growth_money: 'The value of a rare coin collection is {P} and increases by {R}% each year. What will it be worth after {T} years? Round to the nearest cent.',
+    growth_count: 'A town has a population of {P} and grows by {R}% each year. What will the population be after {T} years? Round to the nearest whole number.',
+    decay_money: 'A car is purchased for {P} and depreciates (loses value) by {R}% each year. What is it worth after {T} years? Round to the nearest cent.',
+    decay_count: 'A wildlife refuge has {P} animals, and the population declines by {R}% each year. How many animals remain after {T} years? Round to the nearest whole number.'
+  };
+  function expoTemplateKey(p) { return (p.isGrowth ? 'growth' : 'decay') + '_' + (p.moneyContext ? 'money' : 'count'); }
+  function fmtMoney(n) { return '$' + n.toLocaleString('en-US'); }
+  function fmtCount(n) { return n.toLocaleString('en-US'); }
+  function fmtMoney2(v) { var r = Math.round(v * 100 + 1e-9) / 100; return '$' + r.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtHalf(v) { return (v % 1 === 0) ? String(v) : v.toFixed(1); }
+  function AR3ExpoSentence(p) {
+    var tmpl = AR3_EXPO_TEMPLATES[expoTemplateKey(p)];
+    var amtStr = p.moneyContext ? fmtMoney(p.P) : fmtCount(p.P);
+    return tmpl.replace('{P}', amtStr).replace('{R}', p.ratePercent).replace('{T}', p.t);
+  }
+
+  function AR3PromptDispatch(p) {
+    if (p.kind === 'expo') {
+      return '<div class="qQuestion">' + AR3ExpoSentence(p) + '</div>';
+    }
+    if (p.kind === 'compound') {
+      var nLabel = { 1: 'annually', 2: 'semiannually', 4: 'quarterly', 12: 'monthly' }[p.n];
+      return '<div class="qQuestion">You invest ' + fmtMoney(p.P) + ' at an annual interest rate of ' + p.ratePercent +
+        '%, compounded ' + nLabel + '. What is the value of the investment after ' + p.t + ' years? Round to the nearest cent.</div>';
+    }
+    return '<div class="qQuestion">A ball is launched from a height of ' + p.h0 + ' ft with an initial velocity of ' + p.v0 +
+      ' ft/s. Its height in feet after t seconds is modeled by h(t) = ' + MIN + '16t<sup>2</sup> + ' + p.v0 + 't + ' + p.h0 + '.</div>' +
+      '<div class="eqLine">Find h(' + fmtHalf(p.tVal) + ').</div>';
+  }
+
+  function AR3AnswerDispatch(p) {
+    var isMoney = p.kind === 'compound' || (p.kind === 'expo' && p.moneyContext);
+    var label = p.kind === 'quad' ? 'h(t) =' : (isMoney ? 'Amount ($) =' : 'Amount =');
+    return '<span class="ansLabel">' + label + '</span>' +
+      '<input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' +
+      sharedKbdHTML();
+  }
+  function AR3ReadDispatch(p) {
+    var el = document.getElementById('ans_x');
+    var v = el ? el.value.trim() : '';
+    if (v === '') return null;
+    return { x: v };
+  }
+  function AR3CheckDispatch(p, ans) {
+    if (!ans) return false;
+    var r = parseRat(ans.x); if (!r) return false;
+    var target = p.kind === 'quad' ? R(p.answer, 1) : p.answer;
+    return req(r, target);
+  }
+  function AR3HintsDispatch(p) {
+    if (p.kind === 'expo') return '<p>Multiply the starting amount by (1 + rate) for growth or (1 \u2212 rate) for decay, raised to the number of time periods.</p>';
+    if (p.kind === 'compound') return '<p>Use A = P(1 + r/n)<sup>nt</sup>, where n is how many times per year interest is compounded.</p>';
+    return '<p>Substitute the given time into the height formula and simplify using order of operations \u2014 square the time first.</p>';
+  }
+  function AR3StepsDispatch(p) {
+    if (p.kind === 'expo') {
+      var sign = p.isGrowth ? '+' : MIN;
+      var factor = 1 + (p.isGrowth ? 1 : -1) * (p.ratePercent / 100);
+      var amtDisplay = p.moneyContext ? fmtMoney(p.P) : fmtCount(p.P);
+      var lines = [
+        'A = P(1 ' + sign + ' r)<sup>t</sup> = ' + amtDisplay + '(1 ' + sign + ' ' + p.ratePercent + '/100)<sup>' + p.t + '</sup>',
+        '= ' + amtDisplay + ' \u00d7 ' + factor.toFixed(4) + '<sup>' + p.t + '</sup>',
+        '\u2248 ' + (p.roundMode === 'cent' ? fmtMoney2(p.rawA) : Math.round(p.rawA).toLocaleString('en-US')) + ' (rounded)'
+      ];
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'compound') {
+      var lines2 = [
+        'A = P(1 + r/n)<sup>nt</sup> = ' + fmtMoney(p.P) + '(1 + ' + p.ratePercent + '/100/' + p.n + ')<sup>' + (p.n * p.t) + '</sup>',
+        '\u2248 ' + fmtMoney2(p.rawA) + ' (rounded to the nearest cent)'
+      ];
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    var term1 = -4 * p.k * p.k;
+    var term2 = (p.v0 * p.k) / 2;
+    var lines3 = [
+      'h(' + fmtHalf(p.tVal) + ') = ' + MIN + '16(' + fmtHalf(p.tVal) + ')<sup>2</sup> + ' + p.v0 + '(' + fmtHalf(p.tVal) + ') + ' + p.h0,
+      '= ' + fmtInt(term1) + joinConstInt(term2) + joinConstInt(p.h0),
+      '= ' + p.answer
+    ];
+    return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     AR.4 — Identify and manipulate quadratic, polynomial, exponential,
+     rational, and radical equations and expressions.
+     ===================================================================== */
+  var AR4_curType = 'mixed';
+
+  function genAR4_polyAddSub() {
+    var a1 = nonZero(-6, 6), b1 = ri(-8, 8), c1 = ri(-10, 10);
+    var a2 = nonZero(-6, 6), b2 = ri(-8, 8), c2 = ri(-10, 10);
+    var op = pick(['add', 'sub']);
+    var sign = op === 'add' ? 1 : -1;
+    return {
+      kind: 'polyAddSub', a1: a1, b1: b1, c1: c1, a2: a2, b2: b2, c2: c2, op: op,
+      a: a1 + sign * a2, b: b1 + sign * b2, c: c1 + sign * c2
+    };
+  }
+  function genAR4_exponentRules() {
+    var variant = pick(['mul', 'pow', 'div']);
+    if (variant === 'mul') {
+      var k1 = nonZero(-6, 6), k2 = nonZero(-6, 6), a = ri(1, 6), b = ri(1, 6);
+      return { kind: 'exponentRules', variant: variant, k1: k1, k2: k2, a: a, b: b, coefOut: k1 * k2, expOut: a + b };
+    }
+    if (variant === 'pow') {
+      var k1p = nonZero(-4, 4), bp = ri(2, 4), ap = ri(1, 5);
+      return { kind: 'exponentRules', variant: variant, k1: k1p, b: bp, a: ap, coefOut: ipow(k1p, bp), expOut: ap * bp };
+    }
+    var bDen = ri(1, 4), expOut = ri(1, 4), aNum = bDen + expOut;
+    var k2d = nonZero(-6, 6), coefOut = nonZero(-6, 6);
+    return { kind: 'exponentRules', variant: variant, k1: coefOut * k2d, k2: k2d, a: aNum, b: bDen, coefOut: coefOut, expOut: expOut };
+  }
+  function genAR4_radSimplify() {
+    var squareFree = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22];
+    var m = pick(squareFree), k = ri(2, 6);
+    return { kind: 'radSimplify', k: k, m: m, N: k * k * m };
+  }
+  function genAR4(mode) {
+    var kind = mode === 'mixed' ? pick(['polyAddSub', 'exponentRules', 'radSimplify']) : mode;
+    if (kind === 'polyAddSub') return genAR4_polyAddSub();
+    if (kind === 'exponentRules') return genAR4_exponentRules();
+    return genAR4_radSimplify();
+  }
+
+  function polyHTML(a, b, c) { return firstVarTerm(a, 'x<sup>2</sup>') + joinVarTerm(b, 'x') + joinConstInt(c); }
+  function monomialHTML(coef, exp) {
+    var coefStr = (coef === 1) ? '' : (coef === -1 ? MIN : fmtInt(coef));
+    var xStr = (exp === 1) ? 'x' : ('x<sup>' + exp + '</sup>');
+    return coefStr + xStr;
+  }
+
+  function AR4PromptDispatch(p) {
+    if (p.kind === 'polyAddSub') {
+      var opSym = p.op === 'add' ? ' + ' : ' ' + MIN + ' ';
+      return '<div class="qQuestion">Simplify:</div>' +
+        '<div class="eqLine">(' + polyHTML(p.a1, p.b1, p.c1) + ')' + opSym + '(' + polyHTML(p.a2, p.b2, p.c2) + ')</div>';
+    }
+    if (p.kind === 'exponentRules') {
+      var body;
+      if (p.variant === 'mul') body = monomialHTML(p.k1, p.a) + ' \u00b7 ' + monomialHTML(p.k2, p.b);
+      else if (p.variant === 'pow') body = '(' + monomialHTML(p.k1, p.a) + ')<sup>' + p.b + '</sup>';
+      else body = monomialHTML(p.k1, p.a) + ' \u00f7 ' + monomialHTML(p.k2, p.b);
+      return '<div class="qQuestion">Simplify:</div><div class="eqLine">' + body + '</div>';
+    }
+    return '<div class="qQuestion">Simplify:</div><div class="eqLine">&radic;' + p.N + '</div>';
+  }
+
+  function AR4AnswerDispatch(p) {
+    if (p.kind === 'polyAddSub') {
+      return '<div class="qLabel" style="flex-basis:100%">Write your answer as ax<sup>2</sup> + bx + c</div>' +
+        '<span class="ansLabel">a =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="x squared coefficient">' +
+        '<span class="ansLabel">b =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="x coefficient">' +
+        '<span class="ansLabel">c =</span><input type="text" class="in" id="ans_c" autocomplete="off" aria-label="constant">' +
+        sharedKbdHTML();
+    }
+    if (p.kind === 'exponentRules') {
+      return '<span class="ansLabel">coefficient =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="coefficient">' +
+        '<span class="ansLabel">exponent =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="exponent">' +
+        sharedKbdHTML();
+    }
+    return '<span class="ansLabel">outside &radic; =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="coefficient outside radical">' +
+      '<span class="ansLabel">inside &radic; =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="radicand">' +
+      sharedKbdHTML();
+  }
+
+  function AR4ReadDispatch(p) {
+    if (p.kind === 'polyAddSub') {
+      var ea = document.getElementById('ans_a'), eb = document.getElementById('ans_b'), ec = document.getElementById('ans_c');
+      var va = ea ? ea.value.trim() : '', vb = eb ? eb.value.trim() : '', vc = ec ? ec.value.trim() : '';
+      if (va === '' && vb === '' && vc === '') return null;
+      return { a: va, b: vb, c: vc };
+    }
+    var ea2 = document.getElementById('ans_a'), eb2 = document.getElementById('ans_b');
+    var va2 = ea2 ? ea2.value.trim() : '', vb2 = eb2 ? eb2.value.trim() : '';
+    if (va2 === '' && vb2 === '') return null;
+    return { a: va2, b: vb2 };
+  }
+
+  function AR4CheckDispatch(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'polyAddSub') {
+      var ra = parseRat(ans.a), rb = parseRat(ans.b), rc = parseRat(ans.c);
+      if (!ra || !rb || !rc) return false;
+      return req(ra, R(p.a, 1)) && req(rb, R(p.b, 1)) && req(rc, R(p.c, 1));
+    }
+    if (p.kind === 'exponentRules') {
+      var rc1 = parseRat(ans.a), rc2 = parseRat(ans.b);
+      if (!rc1 || !rc2) return false;
+      return req(rc1, R(p.coefOut, 1)) && req(rc2, R(p.expOut, 1));
+    }
+    var rk = parseRat(ans.a), rm = parseRat(ans.b);
+    if (!rk || !rm) return false;
+    return req(rk, R(p.k, 1)) && req(rm, R(p.m, 1));
+  }
+
+  function AR4HintsDispatch(p) {
+    if (p.kind === 'polyAddSub') return '<p>Combine like terms: match up the x<sup>2</sup> terms, the x terms, and the constant terms separately. If you\u2019re subtracting, distribute the negative sign to every term in the second polynomial first.</p>';
+    if (p.kind === 'exponentRules') {
+      if (p.variant === 'mul') return '<p>Multiply the coefficients together, and add the exponents (same base).</p>';
+      if (p.variant === 'pow') return '<p>Raise the coefficient to the outer power, and multiply the exponents.</p>';
+      return '<p>Divide the coefficients, and subtract the exponents (same base).</p>';
+    }
+    return '<p>Find the largest perfect-square factor of the number under the radical, then take its square root out front.</p>';
+  }
+
+  function AR4StepsDispatch(p) {
+    if (p.kind === 'polyAddSub') {
+      var opWord = p.op === 'add' ? '+' : MIN;
+      var lines = [];
+      if (p.op === 'sub') lines.push('Subtracting is the same as adding the opposite of every term in the second polynomial.');
+      lines.push('x<sup>2</sup> terms: ' + fmtInt(p.a1) + ' ' + opWord + ' (' + fmtInt(p.a2) + ') = ' + fmtInt(p.a));
+      lines.push('x terms: ' + fmtInt(p.b1) + ' ' + opWord + ' (' + fmtInt(p.b2) + ') = ' + fmtInt(p.b));
+      lines.push('constants: ' + fmtInt(p.c1) + ' ' + opWord + ' (' + fmtInt(p.c2) + ') = ' + fmtInt(p.c));
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'exponentRules') {
+      var lines2;
+      if (p.variant === 'mul') lines2 = [
+        'Multiply the coefficients: ' + fmtInt(p.k1) + ' \u00d7 ' + fmtInt(p.k2) + ' = ' + fmtInt(p.coefOut),
+        'Add the exponents: ' + p.a + ' + ' + p.b + ' = ' + p.expOut
+      ];
+      else if (p.variant === 'pow') lines2 = [
+        'Raise the coefficient to the power: ' + fmtInt(p.k1) + '<sup>' + p.b + '</sup> = ' + fmtInt(p.coefOut),
+        'Multiply the exponents: ' + p.a + ' \u00d7 ' + p.b + ' = ' + p.expOut
+      ];
+      else lines2 = [
+        'Divide the coefficients: ' + fmtInt(p.k1) + ' \u00f7 ' + fmtInt(p.k2) + ' = ' + fmtInt(p.coefOut),
+        'Subtract the exponents: ' + p.a + ' ' + MIN + ' ' + p.b + ' = ' + p.expOut
+      ];
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    var lines3 = [
+      'Find the largest perfect square that divides ' + p.N + ': ' + fmtInt(p.k) + '<sup>2</sup> \u00d7 ' + p.m + ' = ' + p.N,
+      '&radic;' + p.N + ' = &radic;(' + fmtInt(p.k) + '<sup>2</sup> \u00d7 ' + p.m + ') = ' + fmtInt(p.k) + '&radic;' + p.m
+    ];
+    return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     AR.5 — Solve equations and evaluate functions (quadratic, polynomial,
+     exponential, rational, and radical).
+     ===================================================================== */
+  var AR5_curType = 'mixed';
+
+  function genAR5_quadratic() {
+    var r1 = ri(-9, 9), r2 = ri(-9, 9);
+    if (r1 > r2) { var t = r1; r1 = r2; r2 = t; }
+    return { kind: 'quadratic', r1: r1, r2: r2, B: -(r1 + r2), C: r1 * r2 };
+  }
+  function genAR5_exponential() {
+    var b = pick([2, 3, 4, 5]), x0 = ri(0, 6), a = ri(1, 5);
+    return { kind: 'exponential', b: b, x0: x0, a: a, c: a * ipow(b, x0) };
+  }
+  function genAR5_radical() {
+    var m = ri(0, 10), k = ri(-10, 10);
+    return { kind: 'radical', m: m, k: k, x0: m * m - k };
+  }
+  function genAR5_rational() {
+    var x0, a, c, k, tries = 0;
+    do {
+      x0 = ri(-9, 9); a = ri(-8, 8); c = nonZero(-6, 6);
+      k = c * (x0 + a);
+      tries++;
+    } while (k === 0 && tries < 50);
+    return { kind: 'rational', a: a, c: c, k: k, x0: x0 };
+  }
+  function genAR5(mode) {
+    var kind = mode === 'mixed' ? pick(['quadratic', 'exponential', 'radical', 'rational']) : mode;
+    if (kind === 'quadratic') return genAR5_quadratic();
+    if (kind === 'exponential') return genAR5_exponential();
+    if (kind === 'radical') return genAR5_radical();
+    return genAR5_rational();
+  }
+
+  function quadFactorHTML(r) {
+    if (r === 0) return 'x';
+    return '(x' + (r > 0 ? (' ' + MIN + ' ' + r) : (' + ' + Math.abs(r))) + ')';
+  }
+
+  function AR5PromptDispatch(p) {
+    if (p.kind === 'quadratic') {
+      return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">x<sup>2</sup>' + joinVarTerm(p.B, 'x') + joinConstInt(p.C) + ' = 0</div>';
+    }
+    if (p.kind === 'exponential') {
+      var coefStr = p.a === 1 ? '' : (fmtInt(p.a) + '\u00b7');
+      return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">' + coefStr + p.b + '<sup>x</sup> = ' + p.c + '</div>';
+    }
+    if (p.kind === 'radical') {
+      return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">&radic;(x' + joinConstInt(p.k) + ') = ' + p.m + '</div>';
+    }
+    return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">' + fmtInt(p.k) + ' / (x' + joinConstInt(p.a) + ') = ' + fmtInt(p.c) + '</div>';
+  }
+
+  function AR5AnswerDispatch(p) {
+    if (p.kind === 'quadratic') {
+      return '<span class="ansLabel">smaller x =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="smaller solution">' +
+        '<span class="ansLabel">larger x =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="larger solution">' +
+        sharedKbdHTML();
+    }
+    return '<span class="ansLabel">x =</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="value of x">' + sharedKbdHTML();
+  }
+
+  function AR5ReadDispatch(p) {
+    if (p.kind === 'quadratic') {
+      var ea = document.getElementById('ans_a'), eb = document.getElementById('ans_b');
+      var va = ea ? ea.value.trim() : '', vb = eb ? eb.value.trim() : '';
+      if (va === '' && vb === '') return null;
+      return { a: va, b: vb };
+    }
+    var el = document.getElementById('ans_x');
+    var v = el ? el.value.trim() : '';
+    if (v === '') return null;
+    return { x: v };
+  }
+
+  function AR5CheckDispatch(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'quadratic') {
+      var ra = parseRat(ans.a), rb = parseRat(ans.b);
+      if (!ra || !rb) return false;
+      return req(ra, R(p.r1, 1)) && req(rb, R(p.r2, 1));
+    }
+    var r = parseRat(ans.x); if (!r) return false;
+    return req(r, R(p.x0, 1));
+  }
+
+  function AR5HintsDispatch(p) {
+    if (p.kind === 'quadratic') return '<p>Find two numbers that multiply to the constant term and add to the coefficient of x, then write the equation as a product of two factors set to zero.</p>';
+    if (p.kind === 'exponential') return '<p>Divide both sides by the coefficient out front, then rewrite the constant as a power of the same base.</p>';
+    if (p.kind === 'radical') return '<p>Square both sides to eliminate the square root, then solve the resulting equation for x.</p>';
+    return '<p>Multiply both sides by the denominator to clear the fraction, then solve the resulting linear equation.</p>';
+  }
+
+  function AR5StepsDispatch(p) {
+    if (p.kind === 'quadratic') {
+      var lines = [
+        'Find two numbers that multiply to ' + fmtInt(p.C) + ' and add to ' + fmtInt(p.B) + ': ' + fmtInt(p.r1) + ' and ' + fmtInt(p.r2),
+        quadFactorHTML(p.r1) + quadFactorHTML(p.r2) + ' = 0',
+        'x = ' + fmtInt(p.r1) + '  or  x = ' + fmtInt(p.r2)
+      ];
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'exponential') {
+      var cOverA = p.c / p.a;
+      var lines2 = [];
+      if (p.a !== 1) lines2.push('Divide both sides by ' + p.a + ': ' + p.b + '<sup>x</sup> = ' + p.c + ' / ' + p.a + ' = ' + cOverA);
+      lines2.push('Write ' + cOverA + ' as a power of ' + p.b + ': ' + p.b + '<sup>' + p.x0 + '</sup> = ' + cOverA);
+      lines2.push('So x = ' + p.x0);
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'radical') {
+      var lines3 = [
+        'Square both sides: x' + joinConstInt(p.k) + ' = ' + p.m + '<sup>2</sup> = ' + (p.m * p.m),
+        'x = ' + (p.m * p.m) + joinConstInt(-p.k) + ' = ' + p.x0
+      ];
+      return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+    }
+    var lines4 = [
+      'Multiply both sides by (x' + joinConstInt(p.a) + '): ' + fmtInt(p.k) + ' = ' + fmtInt(p.c) + 'x' + joinConstInt(p.c * p.a),
+      'Solve for x: x = (' + fmtInt(p.k) + joinConstInt(-p.c * p.a) + ') / ' + fmtInt(p.c) + ' = ' + fmtInt(p.x0)
+    ];
+    return '<ol class="stepList"><li>' + lines4.join('</li><li>') + '</li></ol>';
   }
 
   var STUBS = {
@@ -443,8 +955,87 @@
         }
       },
       emptyMsg: 'Enter your answer before checking.'
+    },
+    'AR.2': {
+      gen: function () { return genAR2(AR2_curType); },
+      controlsHTML: function () {
+        return stdTypeSelHTML('ar2TypeSel', AR2_curType, [
+          ['mixed', 'Mixed'], ['fromEquation', 'From Equation'], ['fromTable', 'From Table'], ['findInput', 'Find the Input']
+        ]);
+      },
+      prompt: function (p) { return AR2PromptDispatch(p); },
+      answerHTML: function (p) { return AR2AnswerDispatch(p); },
+      read: function (p) { return AR2ReadDispatch(p); },
+      check: function (p, ans) { return AR2CheckDispatch(p, ans); },
+      hints: function (p) { return AR2HintsDispatch(p); },
+      steps: function (p) { return AR2StepsDispatch(p); },
+      init: function () {
+        wireSeg('ar2TypeSel', AR2_curType, function (v) { AR2_curType = v; renderCard(); });
+        wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'AR.3': {
+      gen: function () { return genAR3(AR3_curType); },
+      controlsHTML: function () {
+        return stdTypeSelHTML('ar3TypeSel', AR3_curType, [
+          ['mixed', 'Mixed'], ['expo', 'Growth & Decay'], ['compound', 'Compound Interest'], ['quad', 'Projectile Motion']
+        ]);
+      },
+      prompt: function (p) { return AR3PromptDispatch(p); },
+      answerHTML: function (p) { return AR3AnswerDispatch(p); },
+      read: function (p) { return AR3ReadDispatch(p); },
+      check: function (p, ans) { return AR3CheckDispatch(p, ans); },
+      hints: function (p) { return AR3HintsDispatch(p); },
+      steps: function (p) { return AR3StepsDispatch(p); },
+      init: function () {
+        wireSeg('ar3TypeSel', AR3_curType, function (v) { AR3_curType = v; renderCard(); });
+        wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'AR.4': {
+      gen: function () { return genAR4(AR4_curType); },
+      controlsHTML: function () {
+        return stdTypeSelHTML('ar4TypeSel', AR4_curType, [
+          ['mixed', 'Mixed'], ['polyAddSub', 'Add/Subtract Polynomials'], ['exponentRules', 'Exponent Rules'], ['radSimplify', 'Simplify Radicals']
+        ]);
+      },
+      prompt: function (p) { return AR4PromptDispatch(p); },
+      answerHTML: function (p) { return AR4AnswerDispatch(p); },
+      read: function (p) { return AR4ReadDispatch(p); },
+      check: function (p, ans) { return AR4CheckDispatch(p, ans); },
+      hints: function (p) { return AR4HintsDispatch(p); },
+      steps: function (p) { return AR4StepsDispatch(p); },
+      init: function () {
+        wireSeg('ar4TypeSel', AR4_curType, function (v) { AR4_curType = v; renderCard(); });
+        wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'AR.5': {
+      gen: function () { return genAR5(AR5_curType); },
+      controlsHTML: function () {
+        return stdTypeSelHTML('ar5TypeSel', AR5_curType, [
+          ['mixed', 'Mixed'], ['quadratic', 'Quadratic'], ['exponential', 'Exponential'], ['radical', 'Radical'], ['rational', 'Rational']
+        ]);
+      },
+      prompt: function (p) { return AR5PromptDispatch(p); },
+      answerHTML: function (p) { return AR5AnswerDispatch(p); },
+      read: function (p) { return AR5ReadDispatch(p); },
+      check: function (p, ans) { return AR5CheckDispatch(p, ans); },
+      hints: function (p) { return AR5HintsDispatch(p); },
+      steps: function (p) { return AR5StepsDispatch(p); },
+      init: function () {
+        wireSeg('ar5TypeSel', AR5_curType, function (v) { AR5_curType = v; renderCard(); });
+        wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
     }
-    // 'AR.2': { ... } etc. — same pattern, filled in one standard at a time.
   };
 
   var STANDARDS = TSIPortal.REGISTRY.filter(function(r){ return r.sec === SECTION_ID; });
