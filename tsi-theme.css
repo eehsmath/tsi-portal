@@ -329,6 +329,51 @@ td.num.muted, td.muted{color:var(--muted); font-weight:700}
 .answerArea input.in[disabled], .answerArea button[disabled]{opacity:.7}
 
 /* =====================================================================
+   PSR-NEW REUSABLE PIECES (first used by apps/tsi-psr.html)
+   ---------------------------------------------------------------------
+   Ported from math_software_best_practices.md Part 2.2/2.5/2.6, extended
+   with genuinely new pieces PSR's content needed that AR/QR never did —
+   statistical charts and an N-way choice control. Lives here rather than
+   inline per file for the same reason the rest of Part 2/3 does: every
+   TSI page already shares this one stylesheet. See tsi_psr_tweaking_log.md
+   for the full porting-status table.
+   ===================================================================== */
+
+/* ---------- SVG chart responsive sizing (Part 2.5) ----------
+   Fixed-pixel width/height on the <svg> tag itself (set by each chart
+   builder function to match its viewBox), this class only handles the
+   responsive *shrink* on narrow screens — never pairs a percentage width
+   with a fixed-pixel height, per Part 6 #6. */
+.svgWrap{max-width:100%; height:auto; display:block; margin-top:6px}
+
+/* ---------- data table beside a graph (Part 2.6) ---------- */
+.graphRow{display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-top:8px}
+.tblCol{flex:0 0 auto; max-width:100%; overflow-x:auto}
+.tblCol .lbl{margin:0 0 5px; font-size:11.5px; max-width:180px; line-height:1.3; font-weight:900; color:var(--muted)}
+table.ttab.sm{font-size:12.5px; margin-top:0}
+.ttab.sm th,.ttab.sm td{padding:3px 9px; min-width:0; border-width:1.5px}
+
+/* ---------- N-way choice control (Part 2.2 generalization pattern) ----------
+   Same state-class vocabulary as .choice2 (.sel/.right/.wrong/[disabled])
+   so anything already familiar with that control's behavior already
+   knows how this one behaves — just a flexible column count instead of
+   a fixed two. choice2 itself is untouched; this is additive, not a
+   replacement, the same "parameterize, never mutate the shared thing"
+   instinct QR's relPickerHTML applied to AR.1's relSel. */
+.choiceN{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px}
+.choiceN button{padding:13px 14px; font-size:clamp(13.5px,1.8vw,15px); font-weight:900;
+  text-align:center; border:1px solid var(--ui); border-radius:12px; background:#fff; cursor:pointer; font-family:inherit}
+.choiceN button.sel{border-color:#7fb5a8; background:#eafbf5}
+.choiceN button.right{border-color:#3fae6a; background:#eafff2}
+.choiceN button.wrong{border-color:#e5484d; background:#fff2f2}
+.choiceN button[disabled]{cursor:default; opacity:.85}
+
+/* ---------- raw-data chip list (PSR.1 tally kind) ---------- */
+.chipRow{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
+.dataChip{display:inline-block; padding:4px 10px; border-radius:8px; background:#fbf3e6;
+  border:1px solid var(--ui); font-weight:800; font-size:12.5px; color:var(--ink)}
+
+/* =====================================================================
    FLOATING CALCULATOR (tsi-calculator.js)
    ---------------------------------------------------------------------
    Models the actual TSIA2 on-screen calculator: sequential four-function
