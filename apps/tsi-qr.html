@@ -31,10 +31,1116 @@
   var $ = function(s){ return document.querySelector(s); };
   var SECTION_ID = 'quant';
 
-  /* See apps/tsi-ar.html for the STUBS shape and extension pattern. */
+  /* =====================================================================
+     SHARED BUILDING BLOCKS — ported verbatim from apps/tsi-ar.html per
+     math_software_best_practices.md Part 0.3. See tsi_qr_tweaking_log.md
+     for the porting-status table. Only the pieces QR actually uses are
+     included (e.g. no ipow/flipRel — nothing here raises to a variable
+     exponent or flips an inequality, so porting them would be dead code
+     per Part 6 #10).
+     ===================================================================== */
+
+  /* ---------------- Part 3: rational engine ---------------- */
+  var MIN = '\u2212';
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = b; b = a % b; a = t; } return a || 1; }
+  function R(n, d) { d = (d == null) ? 1 : d; if (d < 0) { n = -n; d = -d; } var g = gcd(n, d) || 1; return { n: n / g, d: d / g }; }
+  function req(a, b) { return a.n === b.n && a.d === b.d; }
+  function parseRat(s) {
+    if (s == null) return null;
+    var t = String(s).trim().replace(/\u2212/g, '-');
+    if (t === '') return null;
+    if (/^-?\d+\/\d+$/.test(t)) {
+      var parts = t.split('/'); var d = parseInt(parts[1], 10);
+      if (d === 0) return null;
+      return R(parseInt(parts[0], 10), d);
+    }
+    if (/^-?\d+$/.test(t)) return R(parseInt(t, 10), 1);
+    if (/^-?\d+\.\d+$/.test(t)) {
+      var neg = t[0] === '-'; var abs = neg ? t.slice(1) : t;
+      var pieces = abs.split('.'); var d2 = Math.pow(10, pieces[1].length);
+      var n2 = parseInt(pieces[0] + pieces[1], 10);
+      return R(neg ? -n2 : n2, d2);
+    }
+    return null;
+  }
+
+  /* ---------------- Part 3.1/3.2: sign-aware display helpers ---------------- */
+  function fmtInt(v) { return v < 0 ? MIN + Math.abs(v) : String(v); }
+  function joinConstInt(v) { if (v === 0) return ''; return v < 0 ? ' ' + MIN + ' ' + Math.abs(v) : ' + ' + v; }
+  function firstVarTerm(coef, v) {
+    if (coef === 1) return v;
+    if (coef === -1) return MIN + v;
+    return (coef < 0 ? MIN + Math.abs(coef) : String(coef)) + v;
+  }
+  function joinVarTerm(coef, v) {
+    if (coef === 0) return '';
+    if (coef === 1) return ' + ' + v;
+    if (coef === -1) return ' ' + MIN + ' ' + v;
+    return coef < 0 ? ' ' + MIN + ' ' + Math.abs(coef) + v : ' + ' + coef + v;
+  }
+  function relHTML(r) { return { '<': '&lt;', '>': '&gt;', '=': '=' }[r]; }
+
+  /* ---------------- random helpers ---------------- */
+  function ri(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+  function nonZero(lo, hi) { var v; do { v = ri(lo, hi); } while (v === 0); return v; }
+  function pick(arr) { return arr[ri(0, arr.length - 1)]; }
+
+  /* ---------------- Part 2.1: shared floating keyboard ---------------- */
+  var SHARED_KEYS = ['0','1','2','3','4','5','6','7','8','9','/','\u2212','.'];
+  var sharedActiveInput = null;
+  function buildSharedKbdGrid(pop) {
+    var grid = pop.querySelector('.drKbdGrid'); grid.innerHTML = '';
+    var extra = (grid.dataset.extra || '').split(',').filter(Boolean);
+    SHARED_KEYS.concat(extra).forEach(function (k) {
+      var b = document.createElement('button'); b.type = 'button';
+      b.className = 'drKey' + (k.length > 1 ? ' drKeyWide' : ''); b.textContent = k;
+      b.addEventListener('click', function () {
+        var input = sharedActiveInput; if (!input) return;
+        input.focus();
+        var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+        var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+        input.value = input.value.slice(0, s) + k + input.value.slice(e2);
+        var pos = s + k.length; input.setSelectionRange(pos, pos);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      grid.appendChild(b);
+    });
+    var bs = document.createElement('button'); bs.type = 'button'; bs.className = 'drKey wide'; bs.textContent = '\u232B';
+    bs.addEventListener('click', function () {
+      var input = sharedActiveInput; if (!input) return;
+      input.focus();
+      var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+      var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+      if (s === e2 && s > 0) { s = s - 1; }
+      input.value = input.value.slice(0, s) + input.value.slice(e2);
+      input.setSelectionRange(s, s);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    grid.appendChild(bs);
+  }
+  function closeKeyboards() {
+    document.querySelectorAll('.drKbdPop').forEach(function (p) { p.style.display = 'none'; });
+    document.querySelectorAll('.miniKbdBtn.active').forEach(function (b) { b.classList.remove('active'); });
+  }
+  var kbdDocWired = false;
+  function ensureKbdDocWiring() {
+    if (kbdDocWired) return; kbdDocWired = true;
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('.drKbdPop') || e.target.closest('.drKbdBtn') || e.target.closest('.miniKbdBtn')) return;
+      closeKeyboards();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeKeyboards(); });
+    window.addEventListener('resize', closeKeyboards);
+  }
+  function placeKbd(pop, anchor) {
+    var r = anchor.getBoundingClientRect(), margin = 8;
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    pop.style.width = Math.min(Math.max(r.width, 240), 420) + 'px';
+    var left = r.left, top = r.bottom + margin;
+    if (left + pop.offsetWidth > vw - 10) left = vw - 10 - pop.offsetWidth;
+    if (top + pop.offsetHeight > vh - 10) top = r.top - pop.offsetHeight - margin;
+    pop.style.left = Math.max(6, left) + 'px'; pop.style.top = Math.max(6, top) + 'px';
+  }
+  function wireSharedKbd(scopeEl, btnId, popId) {
+    var btn = document.getElementById(btnId), pop = document.getElementById(popId);
+    if (!btn || !pop || !scopeEl) return;
+    buildSharedKbdGrid(pop);
+    sharedActiveInput = scopeEl.querySelector('input.in');
+    if (!scopeEl._sharedKbdWired) {
+      scopeEl._sharedKbdWired = true;
+      scopeEl.addEventListener('focusin', function (e) {
+        if (e.target && e.target.tagName === 'INPUT' && e.target.classList.contains('in')) sharedActiveInput = e.target;
+      });
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var show = pop.style.display !== 'block';
+      closeKeyboards();
+      if (show) { pop.style.display = 'block'; placeKbd(pop, btn); btn.classList.add('active'); if (sharedActiveInput) sharedActiveInput.focus(); }
+    });
+    ensureKbdDocWiring();
+  }
+  function kbdSVG() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="3" y="6" width="18" height="12" rx="2"></rect>' +
+      '<path d="M7 10h2M11 10h2M15 10h2M5 14h14"></path></svg>';
+  }
+  function sharedKbdHTML(extraKeys) {
+    return '<div>' +
+      '<button type="button" class="miniKbdBtn" id="sharedKbdBtn" aria-label="Open keyboard">' + kbdSVG() + '<span>Keyboard</span></button>' +
+      '<div class="drKbdPop" id="sharedKbdPop"><div class="drKbdGrid" data-extra="' + (extraKeys ? extraKeys.join(',') : '') + '"></div></div>' +
+      '</div>';
+  }
+
+  /* ---------------- Part 2.2: segmented selector ---------------- */
+  function seg(id, cur, opts) {
+    var h = '<div class="drSeg" id="' + id + '" role="tablist">';
+    opts.forEach(function (o) {
+      h += '<button type="button" data-v="' + o[0] + '"' + (o[0] === cur ? ' class="active"' : '') + '>' + o[1] + '</button>';
+    });
+    return h + '</div>';
+  }
+  function segWrap(label, id, cur, opts) {
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<span style="font-size:12px;font-weight:900;letter-spacing:.4px;color:var(--muted)">' + label + '</span>' +
+      seg(id, cur, opts) + '</div>';
+  }
+  function wireSeg(id, cur, onChange) {
+    var el = document.getElementById(id); if (!el) return;
+    el.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { onChange(b.getAttribute('data-v')); });
+    });
+  }
+  function stdTypeSelHTML(selId, curType, options) { return segWrap('Type', selId, curType, options); }
+  function genericReveal(correct) {
+    document.querySelectorAll('#answerArea input.in').forEach(function (el) { el.classList.add(correct ? 'right' : 'wrong'); });
+  }
+
+  /* ---------------- QR-new: generalized relation picker (Part 2.2 extension) ----------------
+     AR.1's relSel was hardcoded to 4 inequality symbols and one module var.
+     QR.3 and QR.4 both need a 3-symbol </=/> picker, so this is written as
+     a parameterized version rather than a second copy — same extension
+     pattern the guide asks for with keyboards ("parameterize, never
+     mutate the shared thing"), applied to a control instead of a key set. */
+  function relPickerHTML(id, symbols) {
+    var btns = symbols.map(function (r) { return '<button type="button" data-r="' + r + '">' + relHTML(r) + '</button>'; }).join('');
+    return '<div class="relSel" id="' + id + '" role="group" aria-label="comparison symbol">' + btns + '</div>';
+  }
+  function wireRelPicker(hostId, setter) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setter(b.getAttribute('data-r'));
+        host.querySelectorAll('button').forEach(function (x) { x.classList.remove('sel'); });
+        b.classList.add('sel');
+      });
+    });
+  }
+  function revealRelPicker(hostId, correctRel) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.disabled = true;
+      if (b.getAttribute('data-r') === correctRel) b.classList.add('right');
+      else if (b.classList.contains('sel')) b.classList.add('wrong');
+    });
+  }
+
+  /* ---------------- QR-new: binary choice control (Part 2.4) ----------------
+     Defined in tsi-theme.css since AR.1 but never actually used there —
+     QR.7's interpretMeaning kind is the first real caller. */
+  function choice2HTML(id, optA, optB) {
+    return '<div class="choice2" id="' + id + '"><button type="button" data-c="A">' + optA + '</button><button type="button" data-c="B">' + optB + '</button></div>';
+  }
+  function wireChoice2(hostId, setter) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setter(b.getAttribute('data-c'));
+        host.querySelectorAll('button').forEach(function (x) { x.classList.remove('sel'); });
+        b.classList.add('sel');
+      });
+    });
+  }
+  function revealChoice2(hostId, correctLetter) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.disabled = true;
+      if (b.getAttribute('data-c') === correctLetter) b.classList.add('right');
+      else if (b.classList.contains('sel')) b.classList.add('wrong');
+    });
+  }
+
+  /* ---------------- QR-new: exact decimal formatting (Part 3 extension) ----------------
+     Converts a rational to a decimal STRING using pure integer arithmetic
+     — never toFixed()/float division — so it's exact for any r.d of the
+     form 2^a*5^b (every value this module generates satisfies that). A
+     float-based formatter is exactly the "suppressed-value display" bug
+     family from Part 6 #5 waiting to happen; this sidesteps it entirely. */
+  function ratToDecimalStr(r) {
+    var d = r.d, n = r.n, twos = 0, fives = 0, dd = d;
+    while (dd % 2 === 0) { dd /= 2; twos++; }
+    while (dd % 5 === 0) { dd /= 5; fives++; }
+    if (dd !== 1) return null;
+    var k = Math.max(twos, fives);
+    var mul = Math.pow(2, k - twos) * Math.pow(5, k - fives);
+    var scaledN = n * mul;
+    var neg = scaledN < 0; scaledN = Math.abs(scaledN);
+    var s = String(scaledN);
+    while (s.length <= k) s = '0' + s;
+    var intPart = k === 0 ? s : s.slice(0, s.length - k);
+    var fracPart = k === 0 ? '' : s.slice(s.length - k);
+    return (neg ? '-' : '') + intPart + (k > 0 ? '.' + fracPart : '');
+  }
+  function fracHTML(n, d) {
+    var neg = (n < 0) !== (d < 0);
+    n = Math.abs(n); d = Math.abs(d);
+    return (neg ? MIN : '') + '<span class="vfrac"><span>' + n + '</span><span>' + d + '</span></span>';
+  }
+  function pctStr(r) { var p = R(r.n * 100, r.d); return p.d === 1 ? String(p.n) : ratToDecimalStr(p); }
+  function labeledValueHTML(letter, valueHTML) {
+    return '<div style="display:inline-flex;align-items:baseline;gap:8px;margin:4px 16px 4px 0">' +
+      '<span style="font-weight:900;color:var(--accent);font-size:14px">' + letter + ':</span>' +
+      '<span style="font-size:19px;font-weight:900">' + valueHTML + '</span></div>';
+  }
+  function propFracHTML(top, bottom) {
+    var topStr = top === 'x' ? '<b style="color:var(--accent)">x</b>' : String(top);
+    var botStr = bottom === 'x' ? '<b style="color:var(--accent)">x</b>' : String(bottom);
+    return '<span class="vfrac"><span>' + topStr + '</span><span>' + botStr + '</span></span>';
+  }
+
+  /* =====================================================================
+     QR.1 — Perform basic math operations with whole numbers/integers,
+     decimals, and fractions.
+     ===================================================================== */
+  var QR1_curType = 'mixed';
+  function genQR1_intOp() {
+    var op = pick(['+', '-', '\u00d7', '\u00f7']);
+    var a, b, answer;
+    if (op === '\u00f7') { b = nonZero(-12, 12); var q = ri(-12, 12); a = b * q; answer = R(q, 1); }
+    else {
+      a = ri(-20, 20); b = ri(-20, 20);
+      if (op === '+') answer = R(a + b, 1);
+      else if (op === '-') answer = R(a - b, 1);
+      else answer = R(a * b, 1);
+    }
+    return { kind: 'intOp', op: op, a: a, b: b, answer: answer };
+  }
+  function genQR1_decOp() {
+    var op = pick(['+', '-', '\u00d7', '\u00f7']);
+    var at, bt, aR, bR, answer;
+    if (op === '\u00f7') {
+      bt = nonZero(-50, 50); var qt = nonZero(-50, 50);
+      bR = R(bt, 10); var qR = R(qt, 10); aR = R(bt * qt, 100); answer = qR;
+    } else {
+      at = ri(-50, 50); bt = ri(-50, 50); aR = R(at, 10); bR = R(bt, 10);
+      if (op === '+') answer = R(aR.n * bR.d + bR.n * aR.d, aR.d * bR.d);
+      else if (op === '-') answer = R(aR.n * bR.d - bR.n * aR.d, aR.d * bR.d);
+      else answer = R(aR.n * bR.n, aR.d * bR.d);
+    }
+    return { kind: 'decOp', op: op, aR: aR, bR: bR, answer: answer };
+  }
+  function genQR1_fracOp() {
+    var DENOMS = [2, 3, 4, 5, 6, 8, 9, 10, 12];
+    var d1 = pick(DENOMS), d2 = pick(DENOMS);
+    var n1 = nonZero(-8, 8), n2 = nonZero(-8, 8);
+    var f1 = R(n1, d1), f2 = R(n2, d2);
+    var op = pick(['+', '-', '\u00d7', '\u00f7']);
+    var answer;
+    if (op === '+') answer = R(f1.n * f2.d + f2.n * f1.d, f1.d * f2.d);
+    else if (op === '-') answer = R(f1.n * f2.d - f2.n * f1.d, f1.d * f2.d);
+    else if (op === '\u00d7') answer = R(f1.n * f2.n, f1.d * f2.d);
+    else answer = R(f1.n * f2.d, f1.d * f2.n);
+    return { kind: 'fracOp', f1: f1, f2: f2, op: op, answer: answer };
+  }
+  function genQR1(mode) {
+    var kind = mode === 'mixed' ? pick(['intOp', 'decOp', 'fracOp']) : mode;
+    if (kind === 'intOp') return genQR1_intOp();
+    if (kind === 'decOp') return genQR1_decOp();
+    return genQR1_fracOp();
+  }
+  function wrapNeg(str, isNeg) { return isNeg ? '(' + str + ')' : str; }
+  function QR1PromptDispatch(p) {
+    var opSym = p.op;
+    if (p.kind === 'intOp') {
+      return '<div class="qQuestion">Simplify:</div><div class="eqLine">' +
+        wrapNeg(fmtInt(p.a), p.a < 0) + ' ' + opSym + ' ' + wrapNeg(fmtInt(p.b), p.b < 0) + '</div>';
+    }
+    if (p.kind === 'decOp') {
+      var aStr = ratToDecimalStr(p.aR), bStr = ratToDecimalStr(p.bR);
+      return '<div class="qQuestion">Simplify:</div><div class="eqLine">' +
+        wrapNeg(aStr, p.aR.n < 0) + ' ' + opSym + ' ' + wrapNeg(bStr, p.bR.n < 0) + '</div>';
+    }
+    return '<div class="qQuestion">Simplify:</div><div class="eqLine">' +
+      fracHTML(p.f1.n, p.f1.d) + ' ' + opSym + ' ' + fracHTML(p.f2.n, p.f2.d) + '</div>';
+  }
+  function QR1AnswerDispatch(p) {
+    return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML();
+  }
+  function QR1ReadDispatch(p) {
+    var el = document.getElementById('ans_x'); var v = el ? el.value.trim() : '';
+    if (v === '') return null;
+    return { x: v };
+  }
+  function QR1CheckDispatch(p, ans) {
+    if (!ans) return false;
+    var r = parseRat(ans.x); if (!r) return false;
+    return req(r, p.answer);
+  }
+  function QR1HintsDispatch(p) {
+    if (p.kind === 'intOp') return '<p>Work through the operation one step at a time, and keep careful track of the sign (positive or negative) of your result.</p>';
+    if (p.kind === 'decOp') return '<p>Line up the decimal points before adding or subtracting. For multiplication or division, it can help to ignore the decimal points first and place them back in afterward.</p>';
+    if (p.op === '+' || p.op === '-') return '<p>Find a common denominator before adding or subtracting the fractions.</p>';
+    if (p.op === '\u00d7') return '<p>Multiply straight across: numerator times numerator, denominator times denominator. Simplify at the end.</p>';
+    return '<p>Dividing by a fraction is the same as multiplying by its reciprocal (flip the second fraction).</p>';
+  }
+  function QR1StepsDispatch(p) {
+    if (p.kind === 'intOp') {
+      var lines = [];
+      if (p.op === '\u00f7') lines.push(fmtInt(p.a) + ' \u00f7 ' + fmtInt(p.b) + ' = ' + fmtInt(p.answer.n));
+      else lines.push(fmtInt(p.a) + ' ' + p.op + ' ' + fmtInt(p.b) + ' = ' + fmtInt(p.answer.n));
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'decOp') {
+      var aStr = ratToDecimalStr(p.aR), bStr = ratToDecimalStr(p.bR), ansStr = ratToDecimalStr(p.answer);
+      return '<ol class="stepList"><li>' + aStr + ' ' + p.op + ' ' + bStr + ' = ' + ansStr + '</li></ol>';
+    }
+    var f1 = p.f1, f2 = p.f2, lines2 = [];
+    if (p.op === '+' || p.op === '-') {
+      var commonD = f1.d * f2.d;
+      lines2.push('Common denominator: ' + f1.d + ' \u00d7 ' + f2.d + ' = ' + commonD);
+      lines2.push(fracHTML(f1.n * f2.d, commonD) + ' ' + p.op + ' ' + fracHTML(f2.n * f1.d, commonD));
+    } else if (p.op === '\u00d7') {
+      lines2.push(fracHTML(f1.n, f1.d) + ' \u00d7 ' + fracHTML(f2.n, f2.d) + ' = ' + fracHTML(f1.n * f2.n, f1.d * f2.d));
+    } else {
+      lines2.push('Flip the second fraction and multiply: ' + fracHTML(f1.n, f1.d) + ' \u00d7 ' + fracHTML(f2.d, f2.n));
+      lines2.push('= ' + fracHTML(f1.n * f2.d, f1.d * f2.n));
+    }
+    lines2.push('Simplified: ' + (p.answer.d === 1 ? fmtInt(p.answer.n) : fracHTML(p.answer.n, p.answer.d)));
+    return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     QR.2 — Round numbers to a given decimal place.
+     ===================================================================== */
+  var QR2_curType = 'mixed';
+  var QR2_PLACES = {
+    one: { divisor: 1000, label: 'the nearest whole number' },
+    tenth: { divisor: 100, label: 'the nearest tenth' },
+    hundredth: { divisor: 10, label: 'the nearest hundredth' }
+  };
+  function roundHalfUpInt(n, d) { var q = Math.floor(n / d); var rem = n - q * d; return (rem * 2 >= d) ? (q + 1) * d : q * d; }
+  function genQR2(mode) {
+    var place = mode === 'mixed' ? pick(['one', 'tenth', 'hundredth']) : mode;
+    var valTh = ri(1, 999999);
+    var forceTie = Math.random() < 0.2;
+    var divisor = QR2_PLACES[place].divisor;
+    if (forceTie && divisor > 1) {
+      var base = Math.floor(valTh / divisor) * divisor;
+      valTh = base + Math.floor(divisor / 2);
+      if (valTh === 0) valTh = divisor;
+    }
+    var roundedTh = roundHalfUpInt(valTh, divisor);
+    return { kind: 'round', place: place, valTh: valTh, roundedTh: roundedTh, answer: R(roundedTh, 1000) };
+  }
+  function QR2PromptDispatch(p) {
+    var valStr = ratToDecimalStr(R(p.valTh, 1000));
+    return '<div class="qQuestion">Round ' + valStr + ' to ' + QR2_PLACES[p.place].label + '.</div>';
+  }
+  function QR2AnswerDispatch(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="rounded value">' + sharedKbdHTML(); }
+  function QR2ReadDispatch(p) { var el = document.getElementById('ans_x'); var v = el ? el.value.trim() : ''; if (v === '') return null; return { x: v }; }
+  function QR2CheckDispatch(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
+  function QR2HintsDispatch(p) { return '<p>Look at the digit immediately to the right of the place you\u2019re rounding to. If it\u2019s 5 or more, round the target digit up; if it\u2019s 4 or less, leave the target digit as is \u2014 then drop everything after it.</p>'; }
+  function QR2StepsDispatch(p) {
+    var valStr = ratToDecimalStr(R(p.valTh, 1000));
+    var ansStr = ratToDecimalStr(p.answer);
+    var lines = [
+      'Original value: ' + valStr,
+      'Look at the digit right after ' + QR2_PLACES[p.place].label.replace('the nearest ', '') + '\u2019s place to decide whether to round up or down.',
+      'Rounded to ' + QR2_PLACES[p.place].label + ': ' + ansStr
+    ];
+    return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     QR.3 — Compare numbers in a variety of forms (decimal, fraction,
+     percent, integer) — rational only.
+     ===================================================================== */
+  var QR3_curType = 'mixed';
+  var QR3_selRel = null;
+  var NICE_FRACS = [[1,2],[1,4],[3,4],[1,5],[2,5],[3,5],[4,5],[1,8],[3,8],[5,8],[7,8],
+                     [1,10],[3,10],[7,10],[9,10],[1,20],[3,20],[1,25],[7,25]];
+  function genQR3Value() {
+    var whole = ri(0, 4);
+    if (Math.random() >= 0.75) return R(whole, 1);
+    var f = pick(NICE_FRACS);
+    return R(whole * f[1] + f[0], f[1]);
+  }
+  function pickForm(r) { var opts = ['decimal', 'fraction', 'percent']; if (r.d === 1) opts.push('integer'); return pick(opts); }
+  function displayValueHTML(r, form) {
+    if (form === 'integer') return String(r.n);
+    if (form === 'decimal') return ratToDecimalStr(r);
+    if (form === 'fraction') return fracHTML(r.n, r.d);
+    return pctStr(r) + '%';
+  }
+  function compareRel(r1, r2) { var lhs = r1.n * r2.d, rhs = r2.n * r1.d; if (lhs === rhs) return '='; return lhs < rhs ? '<' : '>'; }
+  function genQR3_compare() {
+    var r1 = genQR3Value(), r2;
+    if (Math.random() < 0.18) { r2 = r1; } else { do { r2 = genQR3Value(); } while (req(r1, r2)); }
+    return { kind: 'compare', r1: r1, r2: r2, form1: pickForm(r1), form2: pickForm(r2), rel: compareRel(r1, r2) };
+  }
+  function genQR3_order() {
+    var vals = [];
+    while (vals.length < 3) { var v = genQR3Value(); if (!vals.some(function (x) { return req(x, v); })) vals.push(v); }
+    var forms = vals.map(pickForm);
+    var letters = ['A', 'B', 'C'];
+    var idx = [0, 1, 2].slice().sort(function (i, j) { return compareRel(vals[i], vals[j]) === '<' ? -1 : 1; });
+    return { kind: 'order', vals: vals, forms: forms, letters: letters, order: idx.map(function (i) { return letters[i]; }) };
+  }
+  function genQR3(mode) {
+    var kind = mode === 'mixed' ? pick(['compare', 'order']) : mode;
+    return kind === 'compare' ? genQR3_compare() : genQR3_order();
+  }
+  function QR3PromptDispatch(p) {
+    if (p.kind === 'compare') {
+      return '<div class="qQuestion">Compare the two values:</div>' +
+        '<div style="margin-top:6px">' + labeledValueHTML('A', displayValueHTML(p.r1, p.form1)) + labeledValueHTML('B', displayValueHTML(p.r2, p.form2)) + '</div>';
+    }
+    return '<div class="qQuestion">Put these three values in order from smallest to largest.</div>' +
+      '<div style="margin-top:6px">' +
+      labeledValueHTML(p.letters[0], displayValueHTML(p.vals[0], p.forms[0])) +
+      labeledValueHTML(p.letters[1], displayValueHTML(p.vals[1], p.forms[1])) +
+      labeledValueHTML(p.letters[2], displayValueHTML(p.vals[2], p.forms[2])) + '</div>';
+  }
+  function QR3AnswerDispatch(p) {
+    if (p.kind === 'compare') return '<span class="ansLabel">A</span>' + relPickerHTML('qr3RelSel', ['<', '=', '>']) + '<span class="ansLabel">B</span>';
+    return '<div class="qPart"><div class="qLabel">Smallest</div><input type="text" class="in" id="ans_small" maxlength="1" style="width:60px;text-align:center;text-transform:uppercase" autocomplete="off" aria-label="letter of smallest value"></div>' +
+      '<div class="qPart"><div class="qLabel">Middle</div><input type="text" class="in" id="ans_mid" maxlength="1" style="width:60px;text-align:center;text-transform:uppercase" autocomplete="off" aria-label="letter of middle value"></div>' +
+      '<div class="qPart"><div class="qLabel">Largest</div><input type="text" class="in" id="ans_large" maxlength="1" style="width:60px;text-align:center;text-transform:uppercase" autocomplete="off" aria-label="letter of largest value"></div>';
+  }
+  function QR3ReadDispatch(p) {
+    if (p.kind === 'compare') return QR3_selRel ? { rel: QR3_selRel } : null;
+    var es = document.getElementById('ans_small'), em = document.getElementById('ans_mid'), el = document.getElementById('ans_large');
+    var vs = es ? es.value.trim() : '', vm = em ? em.value.trim() : '', vl = el ? el.value.trim() : '';
+    if (vs === '' && vm === '' && vl === '') return null;
+    return { order: [vs, vm, vl] };
+  }
+  function QR3CheckDispatch(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'compare') return ans.rel === p.rel;
+    for (var i = 0; i < 3; i++) { if (String(ans.order[i] || '').trim().toUpperCase() !== p.order[i]) return false; }
+    return true;
+  }
+  function QR3HintsDispatch(p) {
+    if (p.kind === 'compare') return '<p>Convert both values to the same form (decimals work well for comparing) before deciding which is larger.</p>';
+    return '<p>Convert all three values to decimals \u2014 that makes them easy to line up and compare directly.</p>';
+  }
+  function QR3StepsDispatch(p) {
+    if (p.kind === 'compare') {
+      var lines = [
+        'A as a decimal: ' + ratToDecimalStr(p.r1),
+        'B as a decimal: ' + ratToDecimalStr(p.r2),
+        'A ' + relHTML(p.rel) + ' B'
+      ];
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    var decs = p.letters.map(function (L, i) { return L + ' = ' + ratToDecimalStr(p.vals[i]); });
+    var lines2 = ['Convert each value to a decimal: ' + decs.join(', '), 'Order from smallest to largest: ' + p.order.join(' < ')];
+    return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     QR.4 — Compare magnitudes of rational and irrational numbers.
+     ===================================================================== */
+  var QR4_curType = 'mixed';
+  var QR4_selRel = null;
+  function isPerfectSquare(n) { var r = Math.round(Math.sqrt(n)); return r * r === n; }
+  function isqrtFloor(N) { var n = 0; while ((n + 1) * (n + 1) <= N) n++; return n; }
+  function numericOf(val) {
+    if (val.type === 'sqrt') return Math.sqrt(val.N);
+    if (val.type === 'pi') return val.dir === 'mul' ? val.k * Math.PI : Math.PI / val.k;
+    return val.r.n / val.r.d;
+  }
+  function displayValQR4HTML(val) {
+    if (val.type === 'sqrt') return '&radic;' + val.N;
+    if (val.type === 'pi') return (val.dir === 'mul' ? (val.k === 1 ? '' : val.k) + '&pi;' : '&pi;/' + val.k);
+    if (val.r.d === 1) return String(val.r.n);
+    return fracHTML(val.r.n, val.r.d);
+  }
+  var QR4_NICE_FRACS = [[1,2],[1,4],[3,4],[1,5],[2,5],[3,5],[4,5],[1,8],[3,8],[5,8],[7,8]];
+  function genValueQR4() {
+    var t = pick(['sqrt', 'pi', 'rational']);
+    if (t === 'sqrt') return { type: 'sqrt', N: ri(2, 99) };
+    if (t === 'pi') return { type: 'pi', k: ri(1, 4), dir: pick(['mul', 'div']) };
+    var whole = ri(0, 6);
+    if (Math.random() >= 0.6) return { type: 'rat', r: R(whole, 1) };
+    var f = pick(QR4_NICE_FRACS);
+    return { type: 'rat', r: R(whole * f[1] + f[0], f[1]) };
+  }
+  function genQR4_compare() {
+    var v1, v2, rel;
+    if (Math.random() < 0.15) {
+      var base = ri(2, 10);
+      v1 = { type: 'sqrt', N: base * base }; v2 = { type: 'rat', r: R(base, 1) };
+      if (Math.random() < 0.5) { var tmp = v1; v1 = v2; v2 = tmp; }
+      rel = '=';
+    } else {
+      var tries = 0, n1, n2;
+      do { v1 = genValueQR4(); v2 = genValueQR4(); n1 = numericOf(v1); n2 = numericOf(v2); tries++; }
+      while (Math.abs(n1 - n2) < 0.05 && tries < 200);
+      rel = n1 < n2 ? '<' : (n1 > n2 ? '>' : '=');
+    }
+    return { kind: 'compare', v1: v1, v2: v2, rel: rel };
+  }
+  function genQR4_between() {
+    var N; do { N = ri(2, 399); } while (isPerfectSquare(N));
+    var n = isqrtFloor(N);
+    return { kind: 'between', N: N, lo: n, hi: n + 1 };
+  }
+  function genQR4(mode) {
+    var kind = mode === 'mixed' ? pick(['compare', 'between']) : mode;
+    return kind === 'compare' ? genQR4_compare() : genQR4_between();
+  }
+  function QR4PromptDispatch(p) {
+    if (p.kind === 'compare') {
+      return '<div class="qQuestion">Compare the two values:</div>' +
+        '<div style="margin-top:6px">' + labeledValueHTML('A', displayValQR4HTML(p.v1)) + labeledValueHTML('B', displayValQR4HTML(p.v2)) + '</div>';
+    }
+    return '<div class="qQuestion"><span class="eqLine">&radic;' + p.N + '</span> is between which two consecutive integers?</div>';
+  }
+  function QR4AnswerDispatch(p) {
+    if (p.kind === 'compare') return '<span class="ansLabel">A</span>' + relPickerHTML('qr4RelSel', ['<', '=', '>']) + '<span class="ansLabel">B</span>';
+    return '<span class="ansLabel">Lower =</span><input type="text" class="in" id="ans_lo" autocomplete="off" aria-label="lower integer bound">' +
+      '<span class="ansLabel">Upper =</span><input type="text" class="in" id="ans_hi" autocomplete="off" aria-label="upper integer bound">' + sharedKbdHTML();
+  }
+  function QR4ReadDispatch(p) {
+    if (p.kind === 'compare') return QR4_selRel ? { rel: QR4_selRel } : null;
+    var elo = document.getElementById('ans_lo'), ehi = document.getElementById('ans_hi');
+    var vlo = elo ? elo.value.trim() : '', vhi = ehi ? ehi.value.trim() : '';
+    if (vlo === '' && vhi === '') return null;
+    return { lo: vlo, hi: vhi };
+  }
+  function QR4CheckDispatch(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'compare') return ans.rel === p.rel;
+    var lo = parseRat(ans.lo), hi = parseRat(ans.hi);
+    if (!lo || !hi) return false;
+    return req(lo, R(p.lo, 1)) && req(hi, R(p.hi, 1));
+  }
+  function QR4HintsDispatch(p) {
+    if (p.kind === 'compare') return '<p>Estimate each value as a decimal (for a square root, think about which perfect squares it falls between; &pi; is about 3.14) before comparing.</p>';
+    return '<p>Think of the perfect squares near ' + p.N + ' \u2014 which one is just below it, and which is just above?</p>';
+  }
+  function QR4StepsDispatch(p) {
+    if (p.kind === 'compare') {
+      var lines = [
+        'A \u2248 ' + numericOf(p.v1).toFixed(3),
+        'B \u2248 ' + numericOf(p.v2).toFixed(3),
+        'A ' + relHTML(p.rel) + ' B'
+      ];
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    var lines2 = [
+      p.lo + '<sup>2</sup> = ' + (p.lo * p.lo) + ', which is less than ' + p.N,
+      p.hi + '<sup>2</sup> = ' + (p.hi * p.hi) + ', which is greater than ' + p.N,
+      'So &radic;' + p.N + ' is between ' + p.lo + ' and ' + p.hi
+    ];
+    return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     QR.5 — Solve problems with ratios, proportions, and percents.
+     ---------------------------------------------------------------------
+     The proportion generator's construction (pick t, build the other
+     three values around it) is ported/adapted from the legacy
+     apps/proportions.html's genProportion() "easy" branch — same exact
+     identity, translated from that file's own float+epsilon checker to
+     this project's exact-rational req() checker. See tsi_qr_tweaking_log.md.
+     ===================================================================== */
+  var QR5_curType = 'mixed';
+  var QR5_RATIO_NOUNS = [['cats', 'dogs'], ['red marbles', 'blue marbles'], ['sedans', 'trucks'], ['novels', 'textbooks']];
+  function genQR5_proportion() {
+    var pos = pick(['a', 'b', 'c', 'd']);
+    var a, b, c, d, t = ri(2, 9), ans;
+    if (pos === 'a') { c = ri(2, 12); d = ri(2, 12); b = d * t; a = 'x'; ans = t * c; }
+    else if (pos === 'b') { c = ri(2, 12); d = ri(2, 12); a = c * t; b = 'x'; ans = t * d; }
+    else if (pos === 'c') { b = ri(2, 12); d = ri(2, 12); a = b * t; c = 'x'; ans = t * d; }
+    else { a = ri(2, 12); c = ri(2, 12); b = a * t; d = 'x'; ans = t * c; }
+    return { kind: 'proportion', pos: pos, a: a, b: b, c: c, d: d, t: t, answer: R(ans, 1) };
+  }
+  var QR5_NICE_PCTS = [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 80];
+  function genQR5_percent() {
+    var ask = pick(['part', 'whole', 'percent']);
+    var p = pick(QR5_NICE_PCTS);
+    var g = gcd(p, 100);
+    var w = (100 / g) * ri(1, 12);
+    var part = w * p / 100;
+    var ans = ask === 'part' ? part : (ask === 'whole' ? w : p);
+    return { kind: 'percent', ask: ask, p: p, w: w, part: part, answer: R(ans, 1) };
+  }
+  function genQR5_ratio() {
+    var variant = pick(['findPart', 'simplify']);
+    var nounIdx = ri(0, QR5_RATIO_NOUNS.length - 1);
+    if (variant === 'findPart') {
+      var m = ri(1, 9), n; do { n = ri(1, 9); } while (n === m);
+      var k = ri(1, 10), total = k * (m + n), askFor = pick(['first', 'second']);
+      var ans = askFor === 'first' ? k * m : k * n;
+      return { kind: 'ratio', variant: 'findPart', nounIdx: nounIdx, m: m, n: n, total: total, askFor: askFor, answer: R(ans, 1) };
+    }
+    var base = ri(1, 12), base2; do { base2 = ri(1, 12); } while (base2 === base);
+    var g2 = gcd(base, base2), rm = base / g2, rn = base2 / g2;
+    var k2 = ri(1, 8), countA = base * k2, countB = base2 * k2;
+    return { kind: 'ratio', variant: 'simplify', nounIdx: nounIdx, countA: countA, countB: countB, ansM: rm, ansN: rn };
+  }
+  function genQR5(mode) {
+    var kind = mode === 'mixed' ? pick(['proportion', 'percent', 'ratio']) : mode;
+    if (kind === 'proportion') return genQR5_proportion();
+    if (kind === 'percent') return genQR5_percent();
+    return genQR5_ratio();
+  }
+  function QR5PromptDispatch(p) {
+    if (p.kind === 'proportion') {
+      return '<div class="qQuestion">Solve the proportion for x:</div><div class="eqLine">' + propFracHTML(p.a, p.b) + ' &nbsp;=&nbsp; ' + propFracHTML(p.c, p.d) + '</div>';
+    }
+    if (p.kind === 'percent') {
+      if (p.ask === 'part') return '<div class="qQuestion">' + p.p + '% of ' + p.w + ' is what number?</div>';
+      if (p.ask === 'whole') return '<div class="qQuestion">' + p.part + ' is ' + p.p + '% of what number?</div>';
+      return '<div class="qQuestion">' + p.part + ' is what percent of ' + p.w + '?</div>';
+    }
+    var nouns = QR5_RATIO_NOUNS[p.nounIdx];
+    if (p.variant === 'findPart') {
+      var whichNoun = p.askFor === 'first' ? nouns[0] : nouns[1];
+      return '<div class="qQuestion">The ratio of ' + nouns[0] + ' to ' + nouns[1] + ' is ' + p.m + ':' + p.n + '. If there are ' + p.total + ' animals in all, how many are ' + whichNoun + '?</div>';
+    }
+    return '<div class="qQuestion">A collection has ' + p.countA + ' ' + nouns[0] + ' and ' + p.countB + ' ' + nouns[1] + '. Write the ratio of ' + nouns[0] + ' to ' + nouns[1] + ' in simplest form.</div>';
+  }
+  function QR5AnswerDispatch(p) {
+    if (p.kind === 'proportion') return '<span class="ansLabel">x =</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="value of x">' + sharedKbdHTML();
+    if (p.kind === 'percent') {
+      var label = p.ask === 'percent' ? 'Percent (without the % sign) =' : 'Value =';
+      return '<span class="ansLabel">' + label + '</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="answer">' + sharedKbdHTML();
+    }
+    if (p.variant === 'findPart') return '<span class="ansLabel">Count =</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="count">' + sharedKbdHTML();
+    var nouns = QR5_RATIO_NOUNS[p.nounIdx];
+    return '<span class="ansLabel">' + nouns[0] + ' =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="ratio first term" style="width:70px">' +
+      '<span class="ansLabel">:</span>' +
+      '<span class="ansLabel">' + nouns[1] + ' =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="ratio second term" style="width:70px">' + sharedKbdHTML();
+  }
+  function QR5ReadDispatch(p) {
+    if (p.kind === 'ratio' && p.variant === 'simplify') {
+      var ea = document.getElementById('ans_a'), eb = document.getElementById('ans_b');
+      var va = ea ? ea.value.trim() : '', vb = eb ? eb.value.trim() : '';
+      if (va === '' && vb === '') return null;
+      return { m: va, n: vb };
+    }
+    var el = document.getElementById('ans_x'); var v = el ? el.value.trim() : '';
+    if (v === '') return null;
+    return { x: v };
+  }
+  function QR5CheckDispatch(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'proportion' || p.kind === 'percent') { var r = parseRat(ans.x); return !!r && req(r, p.answer); }
+    if (p.variant === 'findPart') { var r2 = parseRat(ans.x); return !!r2 && req(r2, p.answer); }
+    var rm = parseRat(ans.m), rn = parseRat(ans.n);
+    if (!rm || !rn) return false;
+    return req(rm, R(p.ansM, 1)) && req(rn, R(p.ansN, 1));
+  }
+  function QR5HintsDispatch(p) {
+    if (p.kind === 'proportion') return '<p>Cross-multiply the two fractions, then divide to isolate x.</p>';
+    if (p.kind === 'percent') return '<p>Remember: "of" means multiply, and a percent is that number divided by 100.</p>';
+    if (p.variant === 'findPart') return '<p>Add the two ratio numbers together to find how many equal groups make up the total, then find the size of one group.</p>';
+    return '<p>Find the greatest common factor of both counts, then divide both by it.</p>';
+  }
+  function QR5StepsDispatch(p) {
+    if (p.kind === 'proportion') {
+      var A = p.a === 'x' ? 'x' : p.a, B = p.b === 'x' ? 'x' : p.b, C = p.c === 'x' ? 'x' : p.c, D = p.d === 'x' ? 'x' : p.d;
+      var lines = ['Cross multiply: ' + A + ' \u00b7 ' + D + ' = ' + B + ' \u00b7 ' + C, 'Divide to isolate x: x = ' + p.answer.n];
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'percent') {
+      var lines2;
+      if (p.ask === 'part') lines2 = ['Part = ' + p.p + '/100 \u00d7 ' + p.w + ' = ' + p.part];
+      else if (p.ask === 'whole') lines2 = ['Whole = ' + p.part + ' \u00f7 (' + p.p + '/100) = ' + p.w];
+      else lines2 = ['Percent = (' + p.part + ' / ' + p.w + ') \u00d7 100 = ' + p.p + '%'];
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    var nouns = QR5_RATIO_NOUNS[p.nounIdx];
+    if (p.variant === 'findPart') {
+      var lines3 = [
+        'Total equal parts: ' + p.m + ' + ' + p.n + ' = ' + (p.m + p.n),
+        'Size of one part: ' + p.total + ' \u00f7 ' + (p.m + p.n) + ' = ' + (p.total / (p.m + p.n)),
+        (p.askFor === 'first' ? nouns[0] : nouns[1]) + ': ' + (p.askFor === 'first' ? p.m : p.n) + ' \u00d7 ' + (p.total / (p.m + p.n)) + ' = ' + p.answer.n
+      ];
+      return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+    }
+    var lines4 = [
+      'Greatest common factor of ' + p.countA + ' and ' + p.countB + ': ' + gcd(p.countA, p.countB),
+      'Divide both counts by it: ' + p.ansM + ':' + p.ansN
+    ];
+    return '<ol class="stepList"><li>' + lines4.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     QR.6 — Solve proportional relationship problems in context (unit
+     rate, direct variation, financial literacy).
+     ===================================================================== */
+  var QR6_curType = 'mixed';
+  var QR6_UNIT_FRACS = [[1,1],[2,1],[3,1],[1,2],[3,2],[5,2],[1,4],[3,4],[1,5],[2,5],[3,5],[4,5],[1,8],[3,8]];
+  var QR6_UNIT_CONTEXTS = [
+    { sentence: function (a, b) { return 'A car travels ' + a + ' miles in ' + b + ' hours.'; }, unit: 'miles per hour' },
+    { sentence: function (a, b) { return 'A printer produces ' + a + ' pages in ' + b + ' minutes.'; }, unit: 'pages per minute' },
+    { sentence: function (a, b) { return 'A recipe calls for ' + a + ' cups of flour to make ' + b + ' batches of cookies.'; }, unit: 'cups per batch' },
+    { sentence: function (a, b) { return 'A worker earns $' + a + ' for ' + b + ' hours of work.'; }, unit: 'dollars per hour' },
+    { sentence: function (a, b) { return 'A runner covers ' + a + ' meters in ' + b + ' seconds.'; }, unit: 'meters per second' }
+  ];
+  function genQR6_unitRate() {
+    var f = pick(QR6_UNIT_FRACS); var k = R(f[0], f[1]); var mult = ri(2, 9);
+    return { kind: 'unitRate', ctxIdx: ri(0, QR6_UNIT_CONTEXTS.length - 1), a: k.n * mult, b: k.d * mult, answer: k };
+  }
+  function genQR6_directVariation() {
+    var f = pick(QR6_UNIT_FRACS); var k = R(f[0], f[1]);
+    var form = pick(['findY', 'findX', 'findK', 'table']);
+    if (form === 'findY') { var x = ri(1, 12); return { kind: 'directVariation', form: form, k: k, x: x, answer: R(k.n * x, k.d) }; }
+    if (form === 'findX') { var x2 = ri(1, 12); var y2 = R(k.n * x2, k.d); return { kind: 'directVariation', form: form, k: k, y: y2, answer: R(x2, 1) }; }
+    if (form === 'findK') { var x3 = ri(1, 12); var y3 = R(k.n * x3, k.d); return { kind: 'directVariation', form: form, x: x3, y: y3, answer: k }; }
+    var mult = k.d, x0 = ri(1, 4);
+    var xs = [x0, x0 + 1, x0 + 2, x0 + 3].map(function (v) { return v * mult; });
+    var ys = xs.map(function (x) { return k.n * x / k.d; });
+    var blankIdx = ri(0, 3);
+    return { kind: 'directVariation', form: 'table', k: k, xs: xs, ys: ys, blankIdx: blankIdx, answer: R(ys[blankIdx], 1) };
+  }
+  function genQR6_financial() {
+    var context = pick(['simpleInterest', 'linearCost']);
+    if (context === 'simpleInterest') {
+      var P = ri(2, 30) * 100, rPercent = pick([2, 3, 4, 5, 6, 8, 10]), t = ri(1, 8);
+      var I = R(P * rPercent * t, 100), balance = R(P * 100 + P * rPercent * t, 100);
+      var ask = pick(['interest', 'balance', 'rate']);
+      var answer = ask === 'interest' ? I : (ask === 'balance' ? balance : R(rPercent, 1));
+      return { kind: 'financial', context: context, ask: ask, P: P, rPercent: rPercent, t: t, I: I, balance: balance, answer: answer };
+    }
+    var fee = ri(0, 10) * 5, ratePerUnit = pick([1, 2, 3, 4, 5, 6, 8, 10]), units = ri(1, 20);
+    var cost = R(fee + ratePerUnit * units, 1);
+    var ask = pick(['findCost', 'findUnits']);
+    var svcIdx = ri(0, 2);
+    if (ask === 'findCost') return { kind: 'financial', context: context, ask: ask, svcIdx: svcIdx, fee: fee, ratePerUnit: ratePerUnit, units: units, answer: cost };
+    return { kind: 'financial', context: context, ask: ask, svcIdx: svcIdx, fee: fee, ratePerUnit: ratePerUnit, cost: cost, answer: R(units, 1) };
+  }
+  function genQR6(mode) {
+    var kind = mode === 'mixed' ? pick(['unitRate', 'directVariation', 'financial']) : mode;
+    if (kind === 'unitRate') return genQR6_unitRate();
+    if (kind === 'directVariation') return genQR6_directVariation();
+    return genQR6_financial();
+  }
+  var QR6_LINEAR_SERVICES = [
+    { noun: 'A rideshare trip', unit: 'mile', feeNoun: 'base fare' },
+    { noun: 'A print shop job', unit: 'page', feeNoun: 'setup fee' },
+    { noun: 'A gym visit package', unit: 'visit', feeNoun: 'membership fee' }
+  ];
+  function QR6PromptDispatch(p) {
+    if (p.kind === 'unitRate') {
+      var ctx = QR6_UNIT_CONTEXTS[p.ctxIdx];
+      return '<div class="qQuestion">' + ctx.sentence(p.a, p.b) + '</div><div class="eqLine">Find the unit rate in ' + ctx.unit + '.</div>';
+    }
+    if (p.kind === 'directVariation') {
+      if (p.form === 'findY') return '<div class="qQuestion">y varies directly with x. The constant of variation is k = ' + (p.k.d === 1 ? p.k.n : fracHTML(p.k.n, p.k.d)) + '.</div><div class="eqLine">Find y when x = ' + p.x + '.</div>';
+      if (p.form === 'findX') return '<div class="qQuestion">y varies directly with x. The constant of variation is k = ' + (p.k.d === 1 ? p.k.n : fracHTML(p.k.n, p.k.d)) + '.</div><div class="eqLine">Find x when y = ' + (p.y.d === 1 ? p.y.n : fracHTML(p.y.n, p.y.d)) + '.</div>';
+      if (p.form === 'findK') return '<div class="qQuestion">y varies directly with x. When x = ' + p.x + ', y = ' + (p.y.d === 1 ? p.y.n : fracHTML(p.y.n, p.y.d)) + '.</div><div class="eqLine">Find the constant of variation, k.</div>';
+      var rows1 = '<tr><th>x</th>' + p.xs.map(function (x) { return '<td>' + x + '</td>'; }).join('') + '</tr>';
+      var rows2 = '<tr><th>y</th>' + p.ys.map(function (y, i) { return i === p.blankIdx ? '<td class="unknown">?</td>' : '<td>' + y + '</td>'; }).join('') + '</tr>';
+      return '<div class="qQuestion">The table shows a proportional relationship (y = kx). Find the missing value.</div><table class="ttab">' + rows1 + rows2 + '</table>';
+    }
+    if (p.context === 'simpleInterest') {
+      if (p.ask === 'interest') return '<div class="qQuestion">You deposit $' + p.P + ' into an account earning ' + p.rPercent + '% simple annual interest.</div><div class="eqLine">How much interest will you earn after ' + p.t + ' years?</div>';
+      if (p.ask === 'balance') return '<div class="qQuestion">You deposit $' + p.P + ' into an account earning ' + p.rPercent + '% simple annual interest.</div><div class="eqLine">What will the account balance be after ' + p.t + ' years?</div>';
+      return '<div class="qQuestion">You deposit $' + p.P + '. After ' + p.t + ' years of simple annual interest, the balance is $' + ratToDecimalStr(p.balance) + '.</div><div class="eqLine">What is the annual interest rate (as a percent)?</div>';
+    }
+    var svc = QR6_LINEAR_SERVICES[p.svcIdx];
+    if (p.ask === 'findCost') return '<div class="qQuestion">' + svc.noun + ' charges a $' + p.fee + ' ' + svc.feeNoun + ' plus $' + p.ratePerUnit + ' per ' + svc.unit + '.</div><div class="eqLine">What is the total cost for ' + p.units + ' ' + svc.unit + 's?</div>';
+    return '<div class="qQuestion">' + svc.noun + ' charges a $' + p.fee + ' ' + svc.feeNoun + ' plus $' + p.ratePerUnit + ' per ' + svc.unit + '. The total cost was $' + ratToDecimalStr(p.cost) + '.</div><div class="eqLine">How many ' + svc.unit + 's were used?</div>';
+  }
+  function QR6AnswerDispatch(p) {
+    var label = 'Answer =';
+    if (p.kind === 'financial' && p.context === 'simpleInterest' && p.ask === 'rate') label = 'Rate (%) =';
+    return '<span class="ansLabel">' + label + '</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML();
+  }
+  function QR6ReadDispatch(p) { var el = document.getElementById('ans_x'); var v = el ? el.value.trim() : ''; if (v === '') return null; return { x: v }; }
+  function QR6CheckDispatch(p, ans) { if (!ans) return false; var r = parseRat(ans.x); return !!r && req(r, p.answer); }
+  function QR6HintsDispatch(p) {
+    if (p.kind === 'unitRate') return '<p>Divide the first quantity by the second to get the amount per single unit.</p>';
+    if (p.kind === 'directVariation') return '<p>Every proportional relationship follows y = kx. Plug in what you know and solve for the missing piece.</p>';
+    if (p.context === 'simpleInterest') return '<p>Simple interest follows I = P \u00d7 r \u00d7 t, where r is written as a decimal (e.g. 5% = 0.05).</p>';
+    return '<p>Total cost = flat fee + (rate per unit) \u00d7 (number of units).</p>';
+  }
+  function QR6StepsDispatch(p) {
+    if (p.kind === 'unitRate') {
+      var ansStr = ratToDecimalStr(p.answer); if (ansStr === null) ansStr = p.answer.n + '/' + p.answer.d;
+      return '<ol class="stepList"><li>Unit rate = ' + p.a + ' \u00f7 ' + p.b + ' = ' + ansStr + '</li></ol>';
+    }
+    if (p.kind === 'directVariation') {
+      var kStr = p.k.d === 1 ? p.k.n : (p.k.n + '/' + p.k.d);
+      var ansStr2 = p.answer.d === 1 ? p.answer.n : (p.answer.n + '/' + p.answer.d);
+      var lines;
+      if (p.form === 'findY') lines = ['y = kx = ' + kStr + ' \u00d7 ' + p.x + ' = ' + ansStr2];
+      else if (p.form === 'findX') lines = ['y = kx, so x = y \u00f7 k = (' + (p.y.n + '/' + p.y.d) + ') \u00f7 ' + kStr + ' = ' + ansStr2];
+      else if (p.form === 'findK') lines = ['k = y \u00f7 x = (' + (p.y.n + '/' + p.y.d) + ') \u00f7 ' + p.x + ' = ' + ansStr2];
+      else lines = ['k = y \u00f7 x = ' + p.ys[0] + ' \u00f7 ' + p.xs[0] + ' = ' + kStr, 'Missing value = k \u00d7 ' + p.xs[p.blankIdx] + ' = ' + ansStr2];
+      return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+    }
+    if (p.context === 'simpleInterest') {
+      var lines2 = [];
+      if (p.ask === 'interest') lines2 = ['I = P \u00d7 r \u00d7 t = ' + p.P + ' \u00d7 ' + (p.rPercent / 100) + ' \u00d7 ' + p.t + ' = ' + ratToDecimalStr(p.I)];
+      else if (p.ask === 'balance') lines2 = ['Interest: I = ' + p.P + ' \u00d7 ' + (p.rPercent / 100) + ' \u00d7 ' + p.t + ' = ' + ratToDecimalStr(p.I), 'Balance = P + I = ' + p.P + ' + ' + ratToDecimalStr(p.I) + ' = ' + ratToDecimalStr(p.balance)];
+      else lines2 = ['Interest earned: ' + ratToDecimalStr(p.balance) + ' \u2212 ' + p.P + ' = ' + ratToDecimalStr(p.I), 'r = I \u00f7 (P \u00d7 t) = ' + ratToDecimalStr(p.I) + ' \u00f7 (' + p.P + ' \u00d7 ' + p.t + ') = ' + (p.rPercent / 100) + ' = ' + p.rPercent + '%'];
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    var lines3;
+    if (p.ask === 'findCost') lines3 = ['Cost = fee + rate \u00d7 units = ' + p.fee + ' + ' + p.ratePerUnit + ' \u00d7 ' + p.units + ' = ' + ratToDecimalStr(p.answer)];
+    else lines3 = ['Cost \u2212 fee = ' + ratToDecimalStr(p.cost) + ' \u2212 ' + p.fee + ' = ' + (p.cost.n / p.cost.d - p.fee), 'Units = (cost \u2212 fee) \u00f7 rate = ' + p.answer.n];
+    return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+  }
+
+  /* =====================================================================
+     QR.7 — Identify, manipulate, and interpret linear equations,
+     inequalities, and expressions.
+     ---------------------------------------------------------------------
+     Deliberately does NOT duplicate AR.1's solve-linear-equations content
+     — that standard already owns "solve." QR.7's own wording is identify/
+     manipulate/interpret, so this standard covers reading off slope and
+     intercept, simplifying (not solving) a linear expression, and
+     interpreting what a slope/intercept means in a real context.
+     ===================================================================== */
+  var QR7_curType = 'mixed';
+  var QR7_selChoice = null;
+  var QR7_IDENTIFY_CONTEXTS = [
+    { sentence: function (rate, fee) { return 'A plumber charges a $' + fee + ' service fee plus $' + rate + ' per hour of labor.'; } },
+    { sentence: function (rate, fee) { return 'A rideshare ride costs a $' + fee + ' base fare plus $' + rate + ' per mile.'; } },
+    { sentence: function (rate, fee) { return 'A gym membership costs a $' + fee + ' signup fee plus $' + rate + ' per month.'; } },
+    { sentence: function (rate, fee) { return 'A phone plan costs a $' + fee + ' activation fee plus $' + rate + ' per gigabyte of data.'; } }
+  ];
+  var QR7_INTERPRET_CONTEXTS = [
+    { sentence: function (rate, fee) { return 'A plumber charges a $' + fee + ' service fee plus $' + rate + ' per hour of labor. Total cost: C = ' + rate + 'h + ' + fee + '.'; }, rateDesc: 'the cost per hour of labor', feeDesc: 'the flat service fee charged even for 0 hours of labor' },
+    { sentence: function (rate, fee) { return 'A rideshare ride costs a $' + fee + ' base fare plus $' + rate + ' per mile. Total cost: C = ' + rate + 'm + ' + fee + '.'; }, rateDesc: 'the cost per mile driven', feeDesc: 'the flat base fare charged even for 0 miles driven' },
+    { sentence: function (rate, fee) { return 'A phone plan costs a $' + fee + ' activation fee plus $' + rate + ' per gigabyte of data. Total cost: C = ' + rate + 'g + ' + fee + '.'; }, rateDesc: 'the cost per gigabyte of data used', feeDesc: 'the one-time activation fee charged even before any data is used' }
+  ];
+  function genQR7_identify() {
+    var source = pick(['slopeIntercept', 'standard', 'context']);
+    if (source === 'slopeIntercept') { var m = nonZero(-9, 9), b = ri(-12, 12); return { kind: 'identify', source: source, mCoef: m, bConst: b, m: R(m, 1), b: R(b, 1) }; }
+    if (source === 'standard') { var A = nonZero(-9, 9), B = nonZero(-9, 9), C = ri(-20, 20); return { kind: 'identify', source: source, A: A, B: B, C: C, m: R(-A, B), b: R(C, B) }; }
+    var ctxIdx = ri(0, QR7_IDENTIFY_CONTEXTS.length - 1), rate = ri(2, 25), fee = ri(0, 60);
+    return { kind: 'identify', source: source, ctxIdx: ctxIdx, rate: rate, fee: fee, m: R(rate, 1), b: R(fee, 1) };
+  }
+  function genQR7_simplify() {
+    var distrib = Math.random() < 0.5;
+    if (distrib) {
+      var m = nonZero(-6, 6), e = nonZero(-6, 6), bIn = ri(-8, 8), a1 = ri(-8, 8), b1 = ri(-10, 10);
+      return { kind: 'simplify', distrib: true, m: m, e: e, bIn: bIn, a1: a1, b1: b1, coef: m + a1, cst: m * e + bIn + b1 };
+    }
+    var a1p = nonZero(-9, 9), b1p = ri(-10, 10), a2p = nonZero(-9, 9), b2p = ri(-10, 10);
+    return { kind: 'simplify', distrib: false, a1: a1p, b1: b1p, a2: a2p, b2: b2p, coef: a1p + a2p, cst: b1p + b2p };
+  }
+  function genQR7_interpret() {
+    var ctxIdx = ri(0, QR7_INTERPRET_CONTEXTS.length - 1), rate = ri(2, 20), fee = ri(0, 50);
+    var askAbout = pick(['rate', 'fee']);
+    var correctIsA = Math.random() < 0.5;
+    return { kind: 'interpretMeaning', ctxIdx: ctxIdx, rate: rate, fee: fee, askAbout: askAbout, correct: correctIsA ? 'A' : 'B' };
+  }
+  function genQR7(mode) {
+    var kind = mode === 'mixed' ? pick(['identify', 'simplify', 'interpretMeaning']) : mode;
+    if (kind === 'identify') return genQR7_identify();
+    if (kind === 'simplify') return genQR7_simplify();
+    return genQR7_interpret();
+  }
+  function QR7PromptDispatch(p) {
+    if (p.kind === 'identify') {
+      if (p.source === 'slopeIntercept') return '<div class="qQuestion">Identify the slope and y-intercept:</div><div class="eqLine">y = ' + firstVarTerm(p.mCoef, 'x') + joinConstInt(p.bConst) + '</div>';
+      if (p.source === 'standard') return '<div class="qQuestion">Identify the slope and y-intercept:</div><div class="eqLine">' + firstVarTerm(p.A, 'x') + joinVarTerm(p.B, 'y') + ' = ' + fmtInt(p.C) + '</div>';
+      return '<div class="qQuestion">' + QR7_IDENTIFY_CONTEXTS[p.ctxIdx].sentence(p.rate, p.fee) + '</div><div class="eqLine">Identify the rate of change and the starting value.</div>';
+    }
+    if (p.kind === 'simplify') {
+      if (p.distrib) {
+        var mStr = p.m === 1 ? '' : (p.m === -1 ? MIN : fmtInt(p.m));
+        var inner = 'x' + (p.e < 0 ? (' ' + MIN + ' ' + Math.abs(p.e)) : (' + ' + p.e));
+        return '<div class="qQuestion">Simplify (combine like terms):</div><div class="eqLine">' + mStr + '(' + inner + ')' + joinVarTerm(p.a1, 'x') + joinConstInt(p.b1) + '</div>';
+      }
+      return '<div class="qQuestion">Simplify (combine like terms):</div><div class="eqLine">' + firstVarTerm(p.a1, 'x') + joinConstInt(p.b1) + joinVarTerm(p.a2, 'x') + joinConstInt(p.b2) + '</div>';
+    }
+    var ctx = QR7_INTERPRET_CONTEXTS[p.ctxIdx];
+    var num = p.askAbout === 'rate' ? p.rate : p.fee;
+    return '<div class="qQuestion">' + ctx.sentence(p.rate, p.fee) + '</div><div class="eqLine">What does the number ' + num + ' represent in this situation?</div>';
+  }
+  function QR7AnswerDispatch(p) {
+    if (p.kind === 'identify') {
+      var labelM = p.source === 'context' ? 'Rate of change =' : 'Slope =';
+      var labelB = p.source === 'context' ? 'Starting value =' : 'Y-intercept =';
+      return '<span class="ansLabel">' + labelM + '</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="slope">' +
+        '<span class="ansLabel">' + labelB + '</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="y-intercept">' + sharedKbdHTML();
+    }
+    if (p.kind === 'simplify') {
+      return '<span class="ansLabel">coefficient of x =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="coefficient of x">' +
+        '<span class="ansLabel">constant =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="constant">' + sharedKbdHTML();
+    }
+    var ctx = QR7_INTERPRET_CONTEXTS[p.ctxIdx];
+    var correctDesc = p.askAbout === 'rate' ? ctx.rateDesc : ctx.feeDesc;
+    var wrongDesc = p.askAbout === 'rate' ? ctx.feeDesc : ctx.rateDesc;
+    var optA = p.correct === 'A' ? correctDesc : wrongDesc;
+    var optB = p.correct === 'A' ? wrongDesc : correctDesc;
+    return choice2HTML('qr7Choice', optA.charAt(0).toUpperCase() + optA.slice(1), optB.charAt(0).toUpperCase() + optB.slice(1));
+  }
+  function QR7ReadDispatch(p) {
+    if (p.kind === 'interpretMeaning') return QR7_selChoice ? { choice: QR7_selChoice } : null;
+    var ea = document.getElementById('ans_a'), eb = document.getElementById('ans_b');
+    var va = ea ? ea.value.trim() : '', vb = eb ? eb.value.trim() : '';
+    if (va === '' && vb === '') return null;
+    return { a: va, b: vb };
+  }
+  function QR7CheckDispatch(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'identify') { var rm = parseRat(ans.a), rb = parseRat(ans.b); if (!rm || !rb) return false; return req(rm, p.m) && req(rb, p.b); }
+    if (p.kind === 'simplify') { var rc = parseRat(ans.a), rk = parseRat(ans.b); if (!rc || !rk) return false; return req(rc, R(p.coef, 1)) && req(rk, R(p.cst, 1)); }
+    return ans.choice === p.correct;
+  }
+  function QR7HintsDispatch(p) {
+    if (p.kind === 'identify') {
+      if (p.source === 'standard') return '<p>Solve the equation for y to rewrite it as y = mx + b \u2014 then the slope and y-intercept are easy to read off.</p>';
+      if (p.source === 'context') return '<p>The rate of change is how much the total changes per unit; the starting value is what you\u2019d pay (or have) before any units are counted.</p>';
+      return '<p>In y = mx + b, m is the slope (the coefficient of x) and b is the y-intercept (the constant term).</p>';
+    }
+    if (p.kind === 'simplify') {
+      if (p.distrib) return '<p>Distribute the number outside the parentheses to both terms inside first, then combine the remaining x-terms and constants separately.</p>';
+      return '<p>Combine the x-terms with each other and the constants with each other \u2014 keep them in two separate groups.</p>';
+    }
+    return '<p>The number attached to the variable (multiplied by it) is a rate; the number added by itself is a flat starting amount.</p>';
+  }
+  function QR7StepsDispatch(p) {
+    if (p.kind === 'identify') {
+      var mStr = p.m.d === 1 ? fmtInt(p.m.n) : (p.m.n + '/' + p.m.d);
+      var bStr = p.b.d === 1 ? fmtInt(p.b.n) : (p.b.n + '/' + p.b.d);
+      if (p.source === 'standard') {
+        var lines = [
+          'Solve for y: ' + firstVarTerm(p.B, 'y') + ' = ' + fmtInt(p.C) + joinConstInt(-p.A) + 'x (moving the x-term to the right)',
+          'Divide every term by ' + p.B + ': y = ' + mStr + 'x' + (p.b.n === 0 ? '' : ' + ' + bStr),
+          'Slope = ' + mStr + ', y-intercept = ' + bStr
+        ];
+        return '<ol class="stepList"><li>' + lines.join('</li><li>') + '</li></ol>';
+      }
+      if (p.source === 'context') {
+        return '<ol class="stepList"><li>The amount that changes per unit (' + mStr + ') is the rate of change; the amount charged even at zero units (' + bStr + ') is the starting value.</li></ol>';
+      }
+      return '<ol class="stepList"><li>In y = mx + b, the coefficient of x is the slope (' + mStr + ') and the constant term is the y-intercept (' + bStr + ').</li></ol>';
+    }
+    if (p.kind === 'simplify') {
+      var lines2 = [];
+      if (p.distrib) {
+        var mStr2 = p.m === 1 ? '' : (p.m === -1 ? MIN : fmtInt(p.m));
+        lines2.push('Distribute: ' + mStr2 + '(x' + (p.e < 0 ? (' ' + MIN + ' ' + Math.abs(p.e)) : (' + ' + p.e)) + ')' + ' \u2192 ' + firstVarTerm(p.m, 'x') + joinConstInt(p.m * p.e));
+        lines2.push('Combine x-terms: ' + fmtInt(p.m) + ' + (' + fmtInt(p.a1) + ') = ' + fmtInt(p.coef));
+        lines2.push('Combine constants: ' + fmtInt(p.m * p.e) + ' + (' + fmtInt(p.bIn) + ') + (' + fmtInt(p.b1) + ') = ' + fmtInt(p.cst));
+      } else {
+        lines2.push('Combine x-terms: ' + fmtInt(p.a1) + ' + (' + fmtInt(p.a2) + ') = ' + fmtInt(p.coef));
+        lines2.push('Combine constants: ' + fmtInt(p.b1) + ' + (' + fmtInt(p.b2) + ') = ' + fmtInt(p.cst));
+      }
+      lines2.push('Simplified: ' + firstVarTerm(p.coef, 'x') + joinConstInt(p.cst));
+      return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
+    }
+    var ctx = QR7_INTERPRET_CONTEXTS[p.ctxIdx];
+    var correctDesc = p.askAbout === 'rate' ? ctx.rateDesc : ctx.feeDesc;
+    return '<ol class="stepList"><li>The rate (multiplied by the variable) and the flat fee (added by itself) play different roles \u2014 here, the number asked about is ' + correctDesc + '.</li></ol>';
+  }
+
+  /* =====================================================================
+     STUBS registry — one entry per standard, full Part 1 SE contract.
+     ===================================================================== */
   var STUBS = {
-    // 'QR.7': { gen: function(){...}, prompt: function(p){...},
-    //           check: function(p, ans){...}, steps: function(p){...} }
+    'QR.1': {
+      gen: function () { return genQR1(QR1_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('qr1TypeSel', QR1_curType, [['mixed', 'Mixed'], ['intOp', 'Whole & Integers'], ['decOp', 'Decimals'], ['fracOp', 'Fractions']]); },
+      prompt: function (p) { return QR1PromptDispatch(p); },
+      answerHTML: function (p) { return QR1AnswerDispatch(p); },
+      read: function (p) { return QR1ReadDispatch(p); },
+      check: function (p, ans) { return QR1CheckDispatch(p, ans); },
+      hints: function (p) { return QR1HintsDispatch(p); },
+      steps: function (p) { return QR1StepsDispatch(p); },
+      init: function () { wireSeg('qr1TypeSel', QR1_curType, function (v) { QR1_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'QR.2': {
+      gen: function () { return genQR2(QR2_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('qr2TypeSel', QR2_curType, [['mixed', 'Mixed'], ['one', 'Nearest Whole'], ['tenth', 'Nearest Tenth'], ['hundredth', 'Nearest Hundredth']]); },
+      prompt: function (p) { return QR2PromptDispatch(p); },
+      answerHTML: function (p) { return QR2AnswerDispatch(p); },
+      read: function (p) { return QR2ReadDispatch(p); },
+      check: function (p, ans) { return QR2CheckDispatch(p, ans); },
+      hints: function (p) { return QR2HintsDispatch(p); },
+      steps: function (p) { return QR2StepsDispatch(p); },
+      init: function () { wireSeg('qr2TypeSel', QR2_curType, function (v) { QR2_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'QR.3': {
+      gen: function () { QR3_selRel = null; return genQR3(QR3_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('qr3TypeSel', QR3_curType, [['mixed', 'Mixed'], ['compare', 'Compare'], ['order', 'Order']]); },
+      prompt: function (p) { return QR3PromptDispatch(p); },
+      answerHTML: function (p) { return QR3AnswerDispatch(p); },
+      read: function (p) { return QR3ReadDispatch(p); },
+      check: function (p, ans) { return QR3CheckDispatch(p, ans); },
+      hints: function (p) { return QR3HintsDispatch(p); },
+      steps: function (p) { return QR3StepsDispatch(p); },
+      init: function (p) {
+        wireSeg('qr3TypeSel', QR3_curType, function (v) { QR3_curType = v; renderCard(); });
+        if (p.kind === 'compare') wireRelPicker('qr3RelSel', function (r) { QR3_selRel = r; });
+      },
+      reveal: function (p, correct) {
+        if (p.kind === 'compare') revealRelPicker('qr3RelSel', p.rel);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'QR.4': {
+      gen: function () { QR4_selRel = null; return genQR4(QR4_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('qr4TypeSel', QR4_curType, [['mixed', 'Mixed'], ['compare', 'Compare'], ['between', 'Between Which Integers']]); },
+      prompt: function (p) { return QR4PromptDispatch(p); },
+      answerHTML: function (p) { return QR4AnswerDispatch(p); },
+      read: function (p) { return QR4ReadDispatch(p); },
+      check: function (p, ans) { return QR4CheckDispatch(p, ans); },
+      hints: function (p) { return QR4HintsDispatch(p); },
+      steps: function (p) { return QR4StepsDispatch(p); },
+      init: function (p) {
+        wireSeg('qr4TypeSel', QR4_curType, function (v) { QR4_curType = v; renderCard(); });
+        wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+        if (p.kind === 'compare') wireRelPicker('qr4RelSel', function (r) { QR4_selRel = r; });
+      },
+      reveal: function (p, correct) {
+        if (p.kind === 'compare') revealRelPicker('qr4RelSel', p.rel);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'QR.5': {
+      gen: function () { return genQR5(QR5_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('qr5TypeSel', QR5_curType, [['mixed', 'Mixed'], ['proportion', 'Proportions'], ['percent', 'Percents'], ['ratio', 'Ratios']]); },
+      prompt: function (p) { return QR5PromptDispatch(p); },
+      answerHTML: function (p) { return QR5AnswerDispatch(p); },
+      read: function (p) { return QR5ReadDispatch(p); },
+      check: function (p, ans) { return QR5CheckDispatch(p, ans); },
+      hints: function (p) { return QR5HintsDispatch(p); },
+      steps: function (p) { return QR5StepsDispatch(p); },
+      init: function () { wireSeg('qr5TypeSel', QR5_curType, function (v) { QR5_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'QR.6': {
+      gen: function () { return genQR6(QR6_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('qr6TypeSel', QR6_curType, [['mixed', 'Mixed'], ['unitRate', 'Unit Rate'], ['directVariation', 'Direct Variation'], ['financial', 'Financial Literacy']]); },
+      prompt: function (p) { return QR6PromptDispatch(p); },
+      answerHTML: function (p) { return QR6AnswerDispatch(p); },
+      read: function (p) { return QR6ReadDispatch(p); },
+      check: function (p, ans) { return QR6CheckDispatch(p, ans); },
+      hints: function (p) { return QR6HintsDispatch(p); },
+      steps: function (p) { return QR6StepsDispatch(p); },
+      init: function () { wireSeg('qr6TypeSel', QR6_curType, function (v) { QR6_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'QR.7': {
+      gen: function () { QR7_selChoice = null; return genQR7(QR7_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('qr7TypeSel', QR7_curType, [['mixed', 'Mixed'], ['identify', 'Identify'], ['simplify', 'Simplify'], ['interpretMeaning', 'Interpret']]); },
+      prompt: function (p) { return QR7PromptDispatch(p); },
+      answerHTML: function (p) { return QR7AnswerDispatch(p); },
+      read: function (p) { return QR7ReadDispatch(p); },
+      check: function (p, ans) { return QR7CheckDispatch(p, ans); },
+      hints: function (p) { return QR7HintsDispatch(p); },
+      steps: function (p) { return QR7StepsDispatch(p); },
+      init: function (p) {
+        wireSeg('qr7TypeSel', QR7_curType, function (v) { QR7_curType = v; renderCard(); });
+        wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+        if (p.kind === 'interpretMeaning') wireChoice2('qr7Choice', function (c) { QR7_selChoice = c; });
+      },
+      reveal: function (p, correct) {
+        if (p.kind === 'interpretMeaning') revealChoice2('qr7Choice', p.correct);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Enter your answer before checking.'
+    }
   };
 
   var STANDARDS = TSIPortal.REGISTRY.filter(function(r){ return r.sec === SECTION_ID; });
@@ -60,6 +1166,14 @@
     });
   }
 
+  /* ---------------------------------------------------------------------
+     renderCard — the standing controller (Part 0.3), unchanged from
+     apps/tsi-ar.html. Drives whichever SE is selected via the full Part 1
+     contract: gen -> prompt/answerHTML -> (user answers) -> read -> check
+     -> record -> reveal, with hints/steps available on demand and the
+     Session-2 hint/steps credit-integrity split (a correct answer after
+     Show Steps doesn't count toward mastery).
+     --------------------------------------------------------------------- */
   function renderCard(){
     var r = STANDARDS[cur];
     $('#curCode').textContent = r.code;
@@ -81,24 +1195,82 @@
     }
 
     var p = stub.gen();
+    var controls = stub.controlsHTML ? stub.controlsHTML(p) : '';
+    var hasSteps = !!stub.steps;
     $('#card').innerHTML =
       '<span class="seCode">'+r.code+'</span>' +
       '<div class="seName">'+r.name+'</div>' +
+      controls +
       '<div class="promptArea" id="promptArea">'+stub.prompt(p)+'</div>' +
-      '<div class="actionRow">' +
+      '<div class="answerArea" id="answerArea">'+stub.answerHTML(p)+'</div>' +
+      '<div class="fbMsg" id="fbMsg" aria-live="polite"></div>' +
+      '<div class="actionRow" id="actionRow">' +
         '<button class="btn primary" id="checkBtn">Check</button>' +
-        '<button class="btn" id="hintBtn">Hint</button>' +
+        (stub.hints ? '<button class="btn" id="hintBtn">Hint</button>' : '') +
+        (hasSteps ? '<button class="btn" id="stepsBtn" title="Shows the full solution \u2014 a correct answer after this won\u2019t count toward mastery">Show steps</button>' : '') +
       '</div>' +
+      (hasSteps ? '<div class="stepsNote">Hint gives you a nudge without the answer. Show steps walks through the full solution \u2014 use it if you\u2019re stuck, but a correct answer afterward won\u2019t count toward mastery.</div>' : '') +
       '<div class="hintPanel" id="hintPanel"></div>';
 
-    $('#checkBtn').addEventListener('click', function(){
-      var ans = $('#promptArea').querySelector('input') ? $('#promptArea').querySelector('input').value : '';
-      var correct = stub.check(p, ans);
-      TSIPortal.record(r.id, correct, { level: 1 });
-      renderCard();
-    });
-    $('#hintBtn').addEventListener('click', function(){
+    if (stub.init) stub.init(p);
+
+    var hintLogged = false;
+    var stepsRevealed = false;
+
+    function logHintUse(){
+      if (hintLogged) return;
+      hintLogged = true;
       TSIPortal.hint(r.id);
+    }
+
+    $('#checkBtn').addEventListener('click', function(){
+      var ans = stub.read ? stub.read(p) : null;
+      var fb = $('#fbMsg');
+      if (ans === null){
+        fb.textContent = stub.emptyMsg || 'Please enter an answer.';
+        fb.className = 'fbMsg warn';
+        return;
+      }
+      closeKeyboards();
+      var trueCorrect = stub.check(p, ans);
+      var countedCorrect = trueCorrect && !stepsRevealed;
+      TSIPortal.record(r.id, countedCorrect, { level: 1 });
+      if (trueCorrect && stepsRevealed){
+        fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
+        fb.className = 'fbMsg warn';
+      } else if (trueCorrect){
+        fb.textContent = 'Correct! \u2713';
+        fb.className = 'fbMsg ok';
+      } else {
+        fb.textContent = 'Not quite \u2014 see the steps below.';
+        fb.className = 'fbMsg err';
+      }
+      document.querySelectorAll('#answerArea input, #answerArea button').forEach(function(el){ el.disabled = true; });
+      $('#checkBtn').disabled = true;
+      if (stub.reveal) stub.reveal(p, trueCorrect);
+      var nextBtn = document.createElement('button');
+      nextBtn.type = 'button'; nextBtn.className = 'btn primary'; nextBtn.id = 'nextBtn';
+      nextBtn.textContent = 'Next problem \u2192';
+      nextBtn.addEventListener('click', renderCard);
+      $('#actionRow').appendChild(nextBtn);
+      if (!trueCorrect && hasSteps){
+        stepsRevealed = true;
+        var panel = $('#hintPanel');
+        panel.innerHTML = stub.steps(p);
+        panel.classList.add('show');
+      }
+    });
+    var hintBtnEl = $('#hintBtn');
+    if (hintBtnEl) hintBtnEl.addEventListener('click', function(){
+      logHintUse();
+      var panel = $('#hintPanel');
+      panel.innerHTML = stub.hints(p);
+      panel.classList.add('show');
+    });
+    var stepsBtnEl = $('#stepsBtn');
+    if (stepsBtnEl) stepsBtnEl.addEventListener('click', function(){
+      logHintUse();
+      stepsRevealed = true;
       var panel = $('#hintPanel');
       panel.innerHTML = stub.steps(p);
       panel.classList.add('show');
