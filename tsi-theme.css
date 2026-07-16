@@ -215,7 +215,8 @@ td.num.muted, td.muted{color:var(--muted); font-weight:700}
 .modTabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
 .modTab{border:1px solid var(--ui); background:#fff; border-radius:999px; padding:8px 14px;
   font-weight:900; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit}
-.modTab.active{background:var(--accent); border-color:var(--accent); color:#7a1930}.modCard{background:var(--panel); border:1px solid var(--ui); border-radius:18px; box-shadow:var(--shadow); padding:20px}
+.modTab.active{background:var(--accent); border-color:var(--accent); color:#fff}
+.modCard{background:var(--panel); border:1px solid var(--ui); border-radius:18px; box-shadow:var(--shadow); padding:20px}
 .modCard .seCode{display:inline-block; font-weight:900; font-size:12px; color:var(--accent);
   background:#fbeedd; border:1px solid var(--ui); border-radius:6px; padding:2px 8px; margin-bottom:8px}
 .modCard .seName{font-weight:800; font-size:15px; margin-bottom:14px}
@@ -326,3 +327,60 @@ td.num.muted, td.muted{color:var(--muted); font-weight:700}
 .answerArea input.in.right{border-color:#3fae6a; background:#eafff2}
 .answerArea input.in.wrong{border-color:#e5484d; background:#fff2f2}
 .answerArea input.in[disabled], .answerArea button[disabled]{opacity:.7}
+
+/* =====================================================================
+   FLOATING CALCULATOR (tsi-calculator.js)
+   ---------------------------------------------------------------------
+   Models the actual TSIA2 on-screen calculator: sequential four-function
+   arithmetic + single-register memory. No %, no sqrt, no +/- — those
+   exist on the physical TI-108 but not on the on-screen tool this
+   replicates (see tsi_ar_tweaking_log.md for the full scope note).
+   ===================================================================== */
+.calcToggle{
+  position:fixed; right:18px; bottom:18px; z-index:1550;
+  width:56px; height:56px; border-radius:50%; border:0;
+  background:linear-gradient(135deg,var(--rust),var(--wine));
+  color:#fff7ee; box-shadow:0 10px 24px rgba(80,50,20,.28);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.calcToggle svg{width:26px; height:26px}
+.calcToggle:active{transform:translateY(1px)}
+.calcToggle.active{box-shadow:0 4px 14px rgba(80,50,20,.35)}
+
+.calcPanel{
+  position:fixed; right:18px; bottom:86px; z-index:1550;
+  width:250px; max-width:calc(100vw - 36px);
+  background:#fff; border:1px solid var(--ui); border-radius:18px;
+  box-shadow:0 20px 50px rgba(40,20,5,.3);
+  display:none; overflow:hidden;
+}
+.calcPanel.show{display:block}
+.calcHead{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px; background:#fbf3e6; border-bottom:1px solid var(--ui);
+}
+.calcHead b{font-size:13px; font-weight:900; color:var(--ink); letter-spacing:.3px}
+.calcCloseBtn{border:0; background:transparent; color:var(--muted); font-size:19px; line-height:1; cursor:pointer; padding:2px 4px; font-family:inherit}
+.calcCloseBtn:hover{color:var(--ink)}
+.calcDisplayWrap{padding:10px 14px 4px; background:#212b20}
+.calcIndicators{display:flex; gap:10px; padding-bottom:4px; justify-content:flex-end}
+.calcIndicators span{font-size:10px; font-weight:900; letter-spacing:.5px; color:#4c6152}
+.calcIndicators span.on{color:#bdeecb}
+.calcDisplay{
+  font:800 25px/1.2 ui-monospace, Menlo, Consolas, monospace;
+  color:#c9f2d6; text-align:right; letter-spacing:1px;
+  min-height:30px; overflow:hidden; white-space:nowrap;
+}
+.calcGrid{display:grid; grid-template-columns:repeat(4,1fr); gap:7px; padding:12px}
+.calcBtn{
+  height:42px; border-radius:10px; border:1px solid var(--ui); background:#fdf8f0;
+  font-weight:900; font-size:15px; color:var(--ink); cursor:pointer; font-family:inherit;
+}
+.calcBtn:active{transform:translateY(1px)}
+.calcBtn.op{background:linear-gradient(180deg,#f3ddb9,#e6b880); color:#3a2205; border-color:#e0c99a}
+.calcBtn.ctrl{background:#fff0ec; color:#a3324a; border-color:#f0c9c9; font-size:12px}
+.calcBtn.eq{background:linear-gradient(135deg,var(--rust),var(--wine)); color:#fff7ee; border:0}
+@media (max-width:520px){
+  .calcPanel{right:10px; bottom:78px; width:224px}
+  .calcToggle{right:12px; bottom:12px; width:50px; height:50px}
+}
