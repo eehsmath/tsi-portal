@@ -77,6 +77,9 @@
       </div>
     </div>
     <div class="modalBody">
+      <div class="viewCaption" id="stdSourceLine" style="margin-bottom:12px">
+        Standards: <a href="https://reportcenter.highered.texas.gov/training-materials/tsia2-math-test-specifications-v1-4/" target="_blank" rel="noopener">THECB/College Board TSIA2 Mathematics Test Specifications (v1.4), Table 1</a>
+      </div>
       <div class="viewSwitch noprint" role="tablist" aria-label="Report view">
         <button class="viewBtn is-active" data-view="summary" role="tab">Summary</button>
         <button class="viewBtn" data-view="detail" role="tab">Detail</button>
@@ -128,6 +131,11 @@
      QR.1/QR.5/QR.6 goes here once shared. Same shape as the Algebra 1
      portal's LEGACY_APPS: { name, desc, file, group: 'skill'|'drill' }. */
   var LEGACY_APPS = [];
+
+  /* Plain-text form of the same citation shown (as a link) in the report
+     modal — kept as one constant so the wording can't drift between the
+     two places it appears. */
+  var STANDARDS_SOURCE = 'THECB/College Board TSIA2 Mathematics Test Specifications v1.4, Table 1';
 
   /* ---------- build the four section cards ---------- */
   function ringSVG(pct, accent){
@@ -301,10 +309,18 @@
       '<th>Overall</th><th>Recent 10</th><th>Last Active</th><th>Status</th></tr>';
   }
 
-  function rowHTML(view, kind, label, st){
+  function rowHTML(view, kind, label, st, onCRC){
     var cls = (kind === 'std') ? 'std-row' : 'se-row';
+    /* CRC vs. Diagnostic-only scope tag — Detail view only, and only on
+       standard rows (se-rows are internal question-generator sub-parts,
+       not TSIA2 standards, so they have no onCRC value to show).
+       Reuses the existing .tag pill component (styles from the
+       build-status legend) purely for its look, not its original meaning. */
+    var scopeTag = (view === 'detail' && kind === 'std')
+      ? ' <span class="tag '+(onCRC ? 'port' : 'newbuild')+'">'+(onCRC ? 'CRC' : 'Diagnostic only')+'</span>'
+      : '';
     var labelCell = (kind === 'std')
-      ? '<td>'+label+'</td>'
+      ? '<td>'+label+scopeTag+'</td>'
       : '<td class="se-label">'+label+'</td>';
     var overall = st.attempts ? pct(st.correct/st.attempts) : '—';
     var recent  = st.attempts ? pct(st.recentAcc) : '—';
@@ -348,7 +364,7 @@
       var st = TSIPortal.skill(r.id);
       if (!st.attempts) return;
       var label = (r.code ? '<b>'+r.code+'</b> ' : '') + r.name;
-      rows += rowHTML(view, 'std', label, st);
+      rows += rowHTML(view, 'std', label, st, r.onCRC);
       if (r.modules && r.modules.length){
         r.modules.forEach(function(mid){
           rows += rowHTML(view, 'se', mid, TSIPortal.skill(mid));
@@ -370,6 +386,7 @@
     var idText = TSIPortal.studentId() || 'guest';
     var nameText = TSIPortal.studentName() || '';
     var headers = ['id','name','level','skill_kind','skill_id','skill_name',
+      'source','on_crc',
       'total_attempts','total_correct','overall_accuracy','recent_10_accuracy',
       'hints','current_level','attempts_to_mastery','last_active','status'];
     var lines = [headers.map(csvEscape).join(',')];
@@ -381,6 +398,7 @@
       var st = TSIPortal.skill(r.id);
       lines.push([
         idText, nameText, 'standard', 'standard', r.id, r.name,
+        STANDARDS_SOURCE, (r.onCRC ? 'Yes' : 'No'),
         st.attempts, st.attempts?st.correct:'',
         st.attempts?(st.correct/st.attempts).toFixed(4):'',
         st.attempts?st.recentAcc.toFixed(4):'',
@@ -393,6 +411,7 @@
           var mst = TSIPortal.skill(mid);
           lines.push([
             idText, nameText, 'standard', 'se', mid, '',
+            '', '',
             mst.attempts, mst.attempts?mst.correct:'',
             mst.attempts?(mst.correct/mst.attempts).toFixed(4):'',
             mst.attempts?mst.recentAcc.toFixed(4):'',
