@@ -31,10 +31,1616 @@
   var $ = function(s){ return document.querySelector(s); };
   var SECTION_ID = 'geo';
 
-  /* See apps/tsi-ar.html for the STUBS shape and extension pattern.
-     Every standard in this section is a clean new build — nothing to
-     port from the Algebra 1 registry (see reuse notes = null below). */
-  var STUBS = {};
+  /* =====================================================================
+     SHARED BUILDING BLOCKS — ported verbatim from apps/tsi-psr.html per
+     math_software_best_practices.md Part 0.3. See tsi_gsr_tweaking_log.md
+     for the porting-status table. joinConstInt/firstVarTerm/joinVarTerm
+     (AR-only variable-expression helpers) and relPickerHTML/choice2 are
+     NOT ported — GSR never builds a linear expression string and choiceN
+     below supersedes choice2 for every labeled-option control this file
+     needs, same reasoning tsi-psr.html already gave for skipping them.
+     ===================================================================== */
+
+  /* ---------------- Part 3: rational engine ---------------- */
+  var MIN = '\u2212';
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = b; b = a % b; a = t; } return a || 1; }
+  function R(n, d) { d = (d == null) ? 1 : d; if (d < 0) { n = -n; d = -d; } var g = gcd(n, d) || 1; return { n: n / g, d: d / g }; }
+  function req(a, b) { return a.n === b.n && a.d === b.d; }
+  function parseRat(s) {
+    if (s == null) return null;
+    var t = String(s).trim().replace(/\u2212/g, '-');
+    if (t === '') return null;
+    if (/^-?\d+\/\d+$/.test(t)) {
+      var parts = t.split('/'); var d = parseInt(parts[1], 10);
+      if (d === 0) return null;
+      return R(parseInt(parts[0], 10), d);
+    }
+    if (/^-?\d+$/.test(t)) return R(parseInt(t, 10), 1);
+    if (/^-?\d+\.\d+$/.test(t)) {
+      var neg = t[0] === '-'; var abs = neg ? t.slice(1) : t;
+      var pieces = abs.split('.'); var d2 = Math.pow(10, pieces[1].length);
+      var n2 = parseInt(pieces[0] + pieces[1], 10);
+      return R(neg ? -n2 : n2, d2);
+    }
+    return null;
+  }
+
+  /* ---------------- Part 3.1/3.2: sign-aware display helpers ---------------- */
+  function fmtInt(v) { return v < 0 ? MIN + Math.abs(v) : String(v); }
+
+  /* ---------------- random helpers ---------------- */
+  function ri(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+  function nonZero(lo, hi) { var v; do { v = ri(lo, hi); } while (v === 0); return v; }
+  function pick(arr) { return arr[ri(0, arr.length - 1)]; }
+
+  /* ---------------- Part 2.1: shared floating keyboard ---------------- */
+  var SHARED_KEYS = ['0','1','2','3','4','5','6','7','8','9','/','\u2212','.'];
+  var sharedActiveInput = null;
+  function buildSharedKbdGrid(pop) {
+    var grid = pop.querySelector('.drKbdGrid'); grid.innerHTML = '';
+    var extra = (grid.dataset.extra || '').split(',').filter(Boolean);
+    SHARED_KEYS.concat(extra).forEach(function (k) {
+      var b = document.createElement('button'); b.type = 'button';
+      b.className = 'drKey' + (k.length > 1 ? ' drKeyWide' : ''); b.textContent = k;
+      b.addEventListener('click', function () {
+        var input = sharedActiveInput; if (!input) return;
+        input.focus();
+        var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+        var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+        input.value = input.value.slice(0, s) + k + input.value.slice(e2);
+        var pos = s + k.length; input.setSelectionRange(pos, pos);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      grid.appendChild(b);
+    });
+    var bs = document.createElement('button'); bs.type = 'button'; bs.className = 'drKey wide'; bs.textContent = '\u232B';
+    bs.addEventListener('click', function () {
+      var input = sharedActiveInput; if (!input) return;
+      input.focus();
+      var s = (input.selectionStart != null) ? input.selectionStart : input.value.length;
+      var e2 = (input.selectionEnd != null) ? input.selectionEnd : input.value.length;
+      if (s === e2 && s > 0) { s = s - 1; }
+      input.value = input.value.slice(0, s) + input.value.slice(e2);
+      input.setSelectionRange(s, s);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    grid.appendChild(bs);
+  }
+  function closeKeyboards() {
+    document.querySelectorAll('.drKbdPop').forEach(function (p) { p.style.display = 'none'; });
+    document.querySelectorAll('.miniKbdBtn.active').forEach(function (b) { b.classList.remove('active'); });
+  }
+  var kbdDocWired = false;
+  function ensureKbdDocWiring() {
+    if (kbdDocWired) return; kbdDocWired = true;
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('.drKbdPop') || e.target.closest('.drKbdBtn') || e.target.closest('.miniKbdBtn')) return;
+      closeKeyboards();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeKeyboards(); });
+    window.addEventListener('resize', closeKeyboards);
+  }
+  function placeKbd(pop, anchor) {
+    var r = anchor.getBoundingClientRect(), margin = 8;
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    pop.style.width = Math.min(Math.max(r.width, 240), 420) + 'px';
+    var left = r.left, top = r.bottom + margin;
+    if (left + pop.offsetWidth > vw - 10) left = vw - 10 - pop.offsetWidth;
+    if (top + pop.offsetHeight > vh - 10) top = r.top - pop.offsetHeight - margin;
+    pop.style.left = Math.max(6, left) + 'px'; pop.style.top = Math.max(6, top) + 'px';
+  }
+  function wireSharedKbd(scopeEl, btnId, popId) {
+    var btn = document.getElementById(btnId), pop = document.getElementById(popId);
+    if (!btn || !pop || !scopeEl) return;
+    buildSharedKbdGrid(pop);
+    sharedActiveInput = scopeEl.querySelector('input.in');
+    if (!scopeEl._sharedKbdWired) {
+      scopeEl._sharedKbdWired = true;
+      scopeEl.addEventListener('focusin', function (e) {
+        if (e.target && e.target.tagName === 'INPUT' && e.target.classList.contains('in')) sharedActiveInput = e.target;
+      });
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var show = pop.style.display !== 'block';
+      closeKeyboards();
+      if (show) { pop.style.display = 'block'; placeKbd(pop, btn); btn.classList.add('active'); if (sharedActiveInput) sharedActiveInput.focus(); }
+    });
+    ensureKbdDocWiring();
+  }
+  function kbdSVG() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="3" y="6" width="18" height="12" rx="2"></rect>' +
+      '<path d="M7 10h2M11 10h2M15 10h2M5 14h14"></path></svg>';
+  }
+  function sharedKbdHTML(extraKeys) {
+    return '<div>' +
+      '<button type="button" class="miniKbdBtn" id="sharedKbdBtn" aria-label="Open keyboard">' + kbdSVG() + '<span>Keyboard</span></button>' +
+      '<div class="drKbdPop" id="sharedKbdPop"><div class="drKbdGrid" data-extra="' + (extraKeys ? extraKeys.join(',') : '') + '"></div></div>' +
+      '</div>';
+  }
+
+  /* ---------------- Part 2.2: segmented selector ---------------- */
+  function seg(id, cur, opts) {
+    var h = '<div class="drSeg" id="' + id + '" role="tablist">';
+    opts.forEach(function (o) {
+      h += '<button type="button" data-v="' + o[0] + '"' + (o[0] === cur ? ' class="active"' : '') + '>' + o[1] + '</button>';
+    });
+    return h + '</div>';
+  }
+  function segWrap(label, id, cur, opts) {
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<span style="font-size:12px;font-weight:900;letter-spacing:.4px;color:var(--muted)">' + label + '</span>' +
+      seg(id, cur, opts) + '</div>';
+  }
+  function wireSeg(id, cur, onChange) {
+    var el = document.getElementById(id); if (!el) return;
+    el.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { onChange(b.getAttribute('data-v')); });
+    });
+  }
+  function stdTypeSelHTML(selId, curType, options) { return segWrap('Type', selId, curType, options); }
+  function genericReveal(correct) {
+    document.querySelectorAll('#answerArea input.in').forEach(function (el) { el.classList.add(correct ? 'right' : 'wrong'); });
+  }
+
+  /* ---------------- Part 3 extension (from QR/PSR): exact decimal formatting ---------------- */
+  function ratToDecimalStr(r) {
+    var d = r.d, n = r.n, twos = 0, fives = 0, dd = d;
+    while (dd % 2 === 0) { dd /= 2; twos++; }
+    while (dd % 5 === 0) { dd /= 5; fives++; }
+    if (dd !== 1) return null;
+    var k = Math.max(twos, fives);
+    var mul = Math.pow(2, k - twos) * Math.pow(5, k - fives);
+    var scaledN = n * mul;
+    var neg = scaledN < 0; scaledN = Math.abs(scaledN);
+    var s = String(scaledN);
+    while (s.length <= k) s = '0' + s;
+    var intPart = k === 0 ? s : s.slice(0, s.length - k);
+    var fracPart = k === 0 ? '' : s.slice(s.length - k);
+    return (neg ? '-' : '') + intPart + (k > 0 ? '.' + fracPart : '');
+  }
+  function fracHTML(n, d) {
+    var neg = (n < 0) !== (d < 0);
+    n = Math.abs(n); d = Math.abs(d);
+    return (neg ? MIN : '') + '<span class="vfrac"><span>' + n + '</span><span>' + d + '</span></span>';
+  }
+  /* GSR-new: display a rational as a clean string (decimal if it terminates, else n/d) —
+     used constantly across GSR for measurement answers that aren't always whole numbers. */
+  function ratStr(r) {
+    if (r.d === 1) return String(r.n);
+    var dec = ratToDecimalStr(r);
+    return dec !== null ? dec : (r.n + '/' + r.d);
+  }
+  function ratHTMLorInt(r) {
+    if (r.d === 1) return fmtInt(r.n);
+    var dec = ratToDecimalStr(r);
+    return dec !== null ? (dec[0] === '-' ? MIN + dec.slice(1) : dec) : fracHTML(r.n, r.d);
+  }
+
+  /* ---------------- N-way choice control (Part 2.2 generalization, ported from tsi-psr.html) ---------------- */
+  function choiceNHTML(id, options) {
+    var btns = options.map(function (o) { return '<button type="button" data-c="' + o.v + '">' + o.label + '</button>'; }).join('');
+    return '<div class="choiceN" id="' + id + '" role="group">' + btns + '</div>';
+  }
+  function wireChoiceN(hostId, setter) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setter(b.getAttribute('data-c'));
+        host.querySelectorAll('button').forEach(function (x) { x.classList.remove('sel'); });
+        b.classList.add('sel');
+      });
+    });
+  }
+  function revealChoiceN(hostId, correctV) {
+    var host = document.getElementById(hostId); if (!host) return;
+    host.querySelectorAll('button').forEach(function (b) {
+      b.disabled = true;
+      if (b.getAttribute('data-c') === correctV) b.classList.add('right');
+      else if (b.classList.contains('sel')) b.classList.add('wrong');
+    });
+  }
+
+  /* =====================================================================
+     GSR-new shared helpers
+     ===================================================================== */
+
+  /* ---------------- Pythagorean triples pool (primitive + common scaled) ----------------
+     legs [a,b], hyp c. Used by GSR.6 (pythagorean/ratio kinds) and GSR.7
+     (distance kind) so every "nice" right-triangle/coordinate-distance
+     problem this file generates has an exact integer answer. */
+  var PYTH_TRIPLES = [
+    [3, 4, 5], [6, 8, 10], [9, 12, 15], [5, 12, 13], [10, 24, 26],
+    [8, 15, 17], [7, 24, 25], [20, 21, 29], [9, 40, 41], [12, 16, 20],
+    [15, 20, 25], [18, 24, 30]
+  ];
+  function pickTriple() {
+    var t = pick(PYTH_TRIPLES);
+    return Math.random() < 0.5 ? [t[0], t[1], t[2]] : [t[1], t[0], t[2]];
+  }
+
+  /* ---------------- epsilon-safe round-to-n-decimals ----------------
+     Used only by GSR.6's 'solve' kind (genuine sin/cos/tan of a
+     non-special angle is irrational) — see the design note in
+     tsi_gsr_tweaking_log.md for why this is the one place in GSR that
+     grades by matched-rounding instead of exact req(). */
+  function roundTo(v, places) {
+    var f = Math.pow(10, places);
+    return Math.round((v + (v >= 0 ? 1e-9 : -1e-9)) * f) / f;
+  }
+
+  /* ---------------- PI_APPROX ----------------
+     TSIA2-style problems specify "use 3.14 for pi" — treating 3.14 as an
+     EXACT rational constant (157/50) rather than a floating approximation
+     of the real pi means every circle/cylinder answer in this file stays
+     an exact req() comparison like everywhere else, with zero tolerance
+     windows needed. This is the key design decision that keeps GSR.4's
+     circle/cylinder kinds consistent with the rest of the project instead
+     of needing a second decimal-tolerance pattern beyond GSR.6's. */
+  var PI_APPROX = R(314, 100);
+
+  /* ---------------- unit conversion tables (GSR.1/GSR.3) ----------------
+     Each unit's value expressed in terms of a fixed base unit for its
+     category+system, so any from->to factor is an exact rational:
+     answer = R(value * fromFactor, toFactor). */
+  var UNIT_TABLES = {
+    metric_length:   { base: 'meter', units: { millimeter: 1/1000, centimeter: 1/100, meter: 1, kilometer: 1000 } },
+    customary_length:{ base: 'inch',  units: { inch: 1, foot: 12, yard: 36, mile: 63360 } },
+    metric_weight:   { base: 'gram',  units: { milligram: 1/1000, gram: 1, kilogram: 1000 } },
+    customary_weight:{ base: 'ounce', units: { ounce: 1, pound: 16, ton: 32000 } },
+    metric_capacity: { base: 'liter', units: { milliliter: 1/1000, liter: 1 } },
+    customary_capacity:{ base: 'cup', units: { cup: 1, pint: 2, quart: 4, gallon: 16 } },
+    time:            { base: 'second',units: { second: 1, minute: 60, hour: 3600, day: 86400 } }
+  };
+  function unitFactorRatio(catKey, fromU, toU) {
+    var t = UNIT_TABLES[catKey];
+    var fNum = Math.round(t.units[fromU] * 1000), tNum = Math.round(t.units[toU] * 1000);
+    return R(fNum, tNum); // multiply a "fromU" value by this to get "toU"
+  }
+  var UNIT_LABEL = {
+    millimeter: 'millimeters (mm)', centimeter: 'centimeters (cm)', meter: 'meters (m)', kilometer: 'kilometers (km)',
+    inch: 'inches (in)', foot: 'feet (ft)', yard: 'yards (yd)', mile: 'miles (mi)',
+    milligram: 'milligrams (mg)', gram: 'grams (g)', kilogram: 'kilograms (kg)',
+    ounce: 'ounces (oz)', pound: 'pounds (lb)', ton: 'tons',
+    milliliter: 'milliliters (mL)', liter: 'liters (L)',
+    cup: 'cups', pint: 'pints', quart: 'quarts', gallon: 'gallons',
+    second: 'seconds', minute: 'minutes', hour: 'hours', day: 'days'
+  };
+  var UNIT_SHORT = {
+    millimeter: 'mm', centimeter: 'cm', meter: 'm', kilometer: 'km',
+    inch: 'in', foot: 'ft', yard: 'yd', mile: 'mi',
+    milligram: 'mg', gram: 'g', kilogram: 'kg',
+    ounce: 'oz', pound: 'lb', ton: 'tons',
+    milliliter: 'mL', liter: 'L',
+    cup: 'cups', pint: 'pints', quart: 'quarts', gallon: 'gal',
+    second: 'sec', minute: 'min', hour: 'hr', day: 'days'
+  };
+
+  /* =====================================================================
+     GSR-new geometry SVG builders (Part 2.5 extension — first real use
+     for shape/diagram rendering, the way PSR's statistical charts were
+     the first real use of Part 2.5 for data rendering). Every builder:
+     fixed-pixel viewBox, pure string return, no DOM dependency, colors
+     via var(--accent)/var(--ink)/var(--muted) so they inherit the page's
+     own theme, per Part 2.5's rules to the letter.
+     ===================================================================== */
+
+  var GEO_INK = '#2a1f14', GEO_MUTED = '#8a7358', GEO_LINE = '#c9915a';
+
+  /* ---------------- angle diagram (GSR.2 'classify') ---------------- */
+  function angleSVG(deg) {
+    var W = 260, H = 200, ox = 40, oy = 170, R0 = 130;
+    var rad = deg * Math.PI / 180;
+    var x2 = ox + R0 * Math.cos(rad), y2 = oy - R0 * Math.sin(rad);
+    var arcR = 34;
+    var largeArc = deg > 180 ? 1 : 0;
+    var ax = ox + arcR * Math.cos(0), ay = oy - arcR * Math.sin(0);
+    var bx = ox + arcR * Math.cos(rad), by = oy - arcR * Math.sin(rad);
+    var midRad = deg > 180 ? (rad + 2 * Math.PI) / 2 : rad / 2;
+    var lx = ox + (arcR + 18) * Math.cos(midRad), ly = oy - (arcR + 18) * Math.sin(midRad);
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="angle diagram">';
+    s += '<line x1="' + ox + '" y1="' + oy + '" x2="' + (ox + R0) + '" y2="' + oy + '" stroke="' + GEO_INK + '" stroke-width="2.4"></line>';
+    s += '<line x1="' + ox + '" y1="' + oy + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '" stroke="' + GEO_INK + '" stroke-width="2.4"></line>';
+    s += '<path d="M ' + ax.toFixed(1) + ' ' + ay.toFixed(1) + ' A ' + arcR + ' ' + arcR + ' 0 ' + largeArc + ' 0 ' + bx.toFixed(1) + ' ' + by.toFixed(1) + '" fill="none" stroke="var(--accent)" stroke-width="2"></path>';
+    s += '<circle cx="' + ox + '" cy="' + oy + '" r="3" fill="' + GEO_INK + '"></circle>';
+    s += '<text x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" font-size="15" text-anchor="middle" fill="var(--accent)" font-weight="900">' + deg + '\u00b0</text>';
+    s += '</svg>';
+    return s;
+  }
+
+  /* ---------------- angle-pair diagram (GSR.2 'pairs') ----------------
+     kind: 'complementary' | 'supplementary' | 'vertical' */
+  function anglePairSVG(kind, deg1, deg2) {
+    var W = 280, H = 190, ox = 140, oy = 165, R0 = 110;
+    function ray(deg) {
+      var rad = deg * Math.PI / 180;
+      return { x: ox + R0 * Math.cos(rad), y: oy - R0 * Math.sin(rad) };
+    }
+    function arcLabel(startDeg, endDeg, r, txt, color) {
+      var s1 = startDeg * Math.PI / 180, s2 = endDeg * Math.PI / 180;
+      var p1 = { x: ox + r * Math.cos(s1), y: oy - r * Math.sin(s1) };
+      var p2 = { x: ox + r * Math.cos(s2), y: oy - r * Math.sin(s2) };
+      var large = (endDeg - startDeg) > 180 ? 1 : 0;
+      var mid = (startDeg + endDeg) / 2 * Math.PI / 180;
+      var lx = ox + (r + 16) * Math.cos(mid), ly = oy - (r + 16) * Math.sin(mid);
+      return {
+        path: '<path d="M ' + p1.x.toFixed(1) + ' ' + p1.y.toFixed(1) + ' A ' + r + ' ' + r + ' 0 ' + large + ' 0 ' + p2.x.toFixed(1) + ' ' + p2.y.toFixed(1) + '" fill="none" stroke="' + color + '" stroke-width="2"></path>',
+        label: '<text x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" font-size="13.5" text-anchor="middle" fill="' + color + '" font-weight="900">' + txt + '\u00b0</text>'
+      };
+    }
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="angle pair diagram">';
+    if (kind === 'vertical') {
+      var r1 = ray(deg1), r2 = ray(deg1 + 180), r3 = ray(deg1 + deg2), r4 = ray(deg1 + deg2 + 180);
+      s += '<line x1="' + r1.x.toFixed(1) + '" y1="' + r1.y.toFixed(1) + '" x2="' + r2.x.toFixed(1) + '" y2="' + r2.y.toFixed(1) + '" stroke="' + GEO_INK + '" stroke-width="2.2"></line>';
+      s += '<line x1="' + r3.x.toFixed(1) + '" y1="' + r3.y.toFixed(1) + '" x2="' + r4.x.toFixed(1) + '" y2="' + r4.y.toFixed(1) + '" stroke="' + GEO_INK + '" stroke-width="2.2"></line>';
+      var a1 = arcLabel(deg1, deg1 + deg2, 30, deg1, 'var(--accent)');
+      var a2 = arcLabel(deg1 + deg2, deg1 + 180, 30, deg2, GEO_MUTED);
+      s += a1.path + a1.label + a2.path + a2.label;
+      s += '<circle cx="' + ox + '" cy="' + oy + '" r="3" fill="' + GEO_INK + '"></circle>';
+    } else {
+      /* complementary (sum 90) or supplementary (sum 180): two adjacent
+         angles sharing a ray, base ray fixed at 0 deg. */
+      var base = ray(0), mid = ray(deg1), end = ray(deg1 + deg2);
+      s += '<line x1="' + ox + '" y1="' + oy + '" x2="' + base.x.toFixed(1) + '" y2="' + base.y.toFixed(1) + '" stroke="' + GEO_INK + '" stroke-width="2.4"></line>';
+      s += '<line x1="' + ox + '" y1="' + oy + '" x2="' + mid.x.toFixed(1) + '" y2="' + mid.y.toFixed(1) + '" stroke="' + GEO_INK + '" stroke-width="2.4"></line>';
+      s += '<line x1="' + ox + '" y1="' + oy + '" x2="' + end.x.toFixed(1) + '" y2="' + end.y.toFixed(1) + '" stroke="' + GEO_INK + '" stroke-width="2.4"></line>';
+      var b1 = arcLabel(0, deg1, 30, deg1, 'var(--accent)');
+      var b2 = arcLabel(deg1, deg1 + deg2, 30, deg2, GEO_MUTED);
+      s += b1.path + b1.label + b2.path + b2.label;
+      s += '<circle cx="' + ox + '" cy="' + oy + '" r="3" fill="' + GEO_INK + '"></circle>';
+    }
+    s += '</svg>';
+    return s;
+  }
+
+  /* ---------------- 2-D shape diagrams (GSR.4 perimeter/area) ---------------- */
+  function rectangleSVG(w, h, wLabel, hLabel) {
+    var W = 300, H = 220, pad = 50;
+    var maxW = W - 2 * pad, maxH = H - 2 * pad - 20;
+    var scale = Math.min(maxW / w, maxH / h);
+    var rw = w * scale, rh = h * scale;
+    var x0 = (W - rw) / 2, y0 = (H - rh) / 2 - 5;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="rectangle diagram">';
+    s += '<rect x="' + x0.toFixed(1) + '" y="' + y0.toFixed(1) + '" width="' + rw.toFixed(1) + '" height="' + rh.toFixed(1) + '" fill="var(--accent)" fill-opacity="0.14" stroke="var(--accent)" stroke-width="2.2"></rect>';
+    s += '<text x="' + (x0 + rw / 2).toFixed(1) + '" y="' + (y0 + rh + 22).toFixed(1) + '" font-size="14" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">' + (wLabel || w) + '</text>';
+    s += '<text x="' + (x0 - 14).toFixed(1) + '" y="' + (y0 + rh / 2).toFixed(1) + '" font-size="14" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900" transform="rotate(-90 ' + (x0 - 14).toFixed(1) + ' ' + (y0 + rh / 2).toFixed(1) + ')">' + (hLabel || h) + '</text>';
+    s += '</svg>';
+    return s;
+  }
+  /* mode 'sides': schematic triangle with three side labels (perimeter, or GSR.5 congruent/similar).
+     mode 'baseHeight': base along the bottom with a dashed internal altitude (area). */
+  function triangleSVG(mode, vals) {
+    var W = 300, H = 220;
+    var Ax = 60, Ay = 190, Bx = 250, By = 190, Cx = 150, Cy = 45;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="triangle diagram">';
+    s += '<polygon points="' + Ax + ',' + Ay + ' ' + Bx + ',' + By + ' ' + Cx + ',' + Cy + '" fill="var(--accent)" fill-opacity="0.14" stroke="var(--accent)" stroke-width="2.2"></polygon>';
+    if (mode === 'sides') {
+      s += '<text x="' + ((Ax + Bx) / 2) + '" y="' + (Ay + 20) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">' + vals.c + '</text>';
+      s += '<text x="' + ((Ax + Cx) / 2 - 22) + '" y="' + ((Ay + Cy) / 2) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">' + vals.b + '</text>';
+      s += '<text x="' + ((Bx + Cx) / 2 + 22) + '" y="' + ((By + Cy) / 2) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">' + vals.a + '</text>';
+    } else {
+      var fx = Cx;
+      s += '<line x1="' + fx + '" y1="' + Cy + '" x2="' + fx + '" y2="' + Ay + '" stroke="' + GEO_MUTED + '" stroke-width="1.6" stroke-dasharray="4,3"></line>';
+      s += '<rect x="' + (fx - 8) + '" y="' + (Ay - 8) + '" width="8" height="8" fill="none" stroke="' + GEO_MUTED + '" stroke-width="1.4"></rect>';
+      s += '<text x="' + ((Ax + Bx) / 2) + '" y="' + (Ay + 20) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">base = ' + vals.base + '</text>';
+      s += '<text x="' + (fx + 12) + '" y="' + ((Cy + Ay) / 2) + '" font-size="13.5" text-anchor="start" fill="var(--accent)" font-weight="900">height = ' + vals.height + '</text>';
+    }
+    s += '</svg>';
+    return s;
+  }
+  function parallelogramSVG(base, height, side) {
+    var W = 300, H = 220;
+    var Ax = 55, Ay = 185, Bx = 215, By = 185, shift = 55, Cx = Bx - shift, Cy = 55, Dx = Ax - shift, Dy = 55;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="parallelogram diagram">';
+    s += '<polygon points="' + Ax + ',' + Ay + ' ' + Bx + ',' + By + ' ' + Cx + ',' + Cy + ' ' + Dx + ',' + Dy + '" fill="var(--accent)" fill-opacity="0.14" stroke="var(--accent)" stroke-width="2.2"></polygon>';
+    s += '<line x1="' + Dx + '" y1="' + Dy + '" x2="' + Dx + '" y2="' + Ay + '" stroke="' + GEO_MUTED + '" stroke-width="1.6" stroke-dasharray="4,3"></line>';
+    s += '<rect x="' + (Dx - 8) + '" y="' + (Ay - 8) + '" width="8" height="8" fill="none" stroke="' + GEO_MUTED + '" stroke-width="1.4"></rect>';
+    s += '<text x="' + ((Ax + Bx) / 2) + '" y="' + (Ay + 20) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">base = ' + base + '</text>';
+    s += '<text x="' + (Dx - 12) + '" y="' + ((Dy + Ay) / 2) + '" font-size="13.5" text-anchor="end" fill="var(--accent)" font-weight="900">height = ' + height + '</text>';
+    s += '<text x="' + ((Bx + Cx) / 2 + 16) + '" y="' + ((By + Cy) / 2) + '" font-size="13.5" text-anchor="start" fill="' + GEO_INK + '" font-weight="900">' + side + '</text>';
+    s += '</svg>';
+    return s;
+  }
+  function trapezoidSVG(b1, b2, height, leftSide, rightSide) {
+    var W = 300, H = 220;
+    var Ax = 60, Ay = 185, Bx = 240, By = 185, inset = 40, Cx = Bx - inset, Cy = 55, Dx = Ax + inset, Dy = 55;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="trapezoid diagram">';
+    s += '<polygon points="' + Ax + ',' + Ay + ' ' + Bx + ',' + By + ' ' + Cx + ',' + Cy + ' ' + Dx + ',' + Dy + '" fill="var(--accent)" fill-opacity="0.14" stroke="var(--accent)" stroke-width="2.2"></polygon>';
+    s += '<line x1="' + Dx + '" y1="' + Dy + '" x2="' + Dx + '" y2="' + Ay + '" stroke="' + GEO_MUTED + '" stroke-width="1.6" stroke-dasharray="4,3"></line>';
+    s += '<rect x="' + (Dx - 8) + '" y="' + (Ay - 8) + '" width="8" height="8" fill="none" stroke="' + GEO_MUTED + '" stroke-width="1.4"></rect>';
+    s += '<text x="' + ((Ax + Bx) / 2) + '" y="' + (Ay + 20) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">b\u2081 = ' + b1 + '</text>';
+    s += '<text x="' + ((Cx + Dx) / 2) + '" y="' + (Cy - 10) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">b\u2082 = ' + b2 + '</text>';
+    s += '<text x="' + (Dx - 12) + '" y="' + ((Dy + Ay) / 2) + '" font-size="13.5" text-anchor="end" fill="var(--accent)" font-weight="900">h = ' + height + '</text>';
+    s += '<text x="' + ((Ax + Dx) / 2 - 14) + '" y="' + ((Ay + Dy) / 2) + '" font-size="12.5" text-anchor="middle" fill="' + GEO_MUTED + '" font-weight="800">' + leftSide + '</text>';
+    s += '<text x="' + ((Bx + Cx) / 2 + 14) + '" y="' + ((By + Cy) / 2) + '" font-size="12.5" text-anchor="middle" fill="' + GEO_MUTED + '" font-weight="800">' + rightSide + '</text>';
+    s += '</svg>';
+    return s;
+  }
+  function circleSVG(r, labelText) {
+    var W = 260, H = 220, cx = 130, cy = 110, R0 = 85;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="circle diagram">';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + R0 + '" fill="var(--accent)" fill-opacity="0.14" stroke="var(--accent)" stroke-width="2.2"></circle>';
+    s += '<line x1="' + cx + '" y1="' + cy + '" x2="' + (cx + R0) + '" y2="' + cy + '" stroke="' + GEO_INK + '" stroke-width="2"></line>';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="2.6" fill="' + GEO_INK + '"></circle>';
+    s += '<text x="' + (cx + R0 / 2) + '" y="' + (cy - 8) + '" font-size="14" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">' + (labelText || r) + '</text>';
+    s += '</svg>';
+    return s;
+  }
+  /* pseudo-3D rectangular prism (l x w x h) */
+  function rectPrismSVG(l, w, h) {
+    var W = 300, H = 230, ox = 90, oy = 175, sk = 40;
+    var maxDim = Math.max(l, w, h);
+    var sc = Math.min(150 / maxDim, 100 / maxDim) * 1.0;
+    var lp = Math.max(30, l * sc * 0.9), hp = Math.max(30, h * sc * 0.9), wp = Math.max(20, w * sc * 0.55);
+    var x0 = ox, y0 = oy;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="rectangular prism diagram">';
+    /* front face */
+    var fx0 = x0, fy0 = y0 - hp, fx1 = x0 + lp, fy1 = y0;
+    s += '<polygon points="' + fx0 + ',' + fy0 + ' ' + fx1 + ',' + fy0 + ' ' + fx1 + ',' + fy1 + ' ' + fx0 + ',' + fy1 + '" fill="var(--accent)" fill-opacity="0.22" stroke="var(--accent)" stroke-width="2"></polygon>';
+    /* top face (parallelogram) */
+    s += '<polygon points="' + fx0 + ',' + fy0 + ' ' + (fx0 + wp) + ',' + (fy0 - wp * 0.55) + ' ' + (fx1 + wp) + ',' + (fy0 - wp * 0.55) + ' ' + fx1 + ',' + fy0 + '" fill="var(--accent)" fill-opacity="0.36" stroke="var(--accent)" stroke-width="2"></polygon>';
+    /* side face (parallelogram) */
+    s += '<polygon points="' + fx1 + ',' + fy0 + ' ' + (fx1 + wp) + ',' + (fy0 - wp * 0.55) + ' ' + (fx1 + wp) + ',' + (fy1 - wp * 0.55) + ' ' + fx1 + ',' + fy1 + '" fill="var(--accent)" fill-opacity="0.28" stroke="var(--accent)" stroke-width="2"></polygon>';
+    s += '<text x="' + ((fx0 + fx1) / 2) + '" y="' + (fy1 + 20) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">l = ' + l + '</text>';
+    s += '<text x="' + (fx0 - 12) + '" y="' + ((fy0 + fy1) / 2) + '" font-size="13.5" text-anchor="end" fill="' + GEO_INK + '" font-weight="900">h = ' + h + '</text>';
+    s += '<text x="' + (fx1 + wp / 2 + 8) + '" y="' + (fy1 - wp * 0.28 + 14) + '" font-size="13.5" text-anchor="start" fill="var(--accent)" font-weight="900">w = ' + w + '</text>';
+    s += '</svg>';
+    return s;
+  }
+  /* pseudo-3D cylinder */
+  function cylinderSVG(r, h) {
+    var W = 260, H = 230, cx = 130, ellipseRy = 18;
+    var sc = Math.min(80 / r, 140 / h);
+    var Rr = Math.max(45, r * sc * 0.6), Hh = Math.max(60, h * sc * 0.7);
+    var topY = 55, botY = topY + Hh;
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="cylinder diagram">';
+    s += '<rect x="' + (cx - Rr) + '" y="' + topY + '" width="' + (2 * Rr) + '" height="' + Hh + '" fill="var(--accent)" fill-opacity="0.16" stroke="var(--accent)" stroke-width="0"></rect>';
+    s += '<line x1="' + (cx - Rr) + '" y1="' + topY + '" x2="' + (cx - Rr) + '" y2="' + botY + '" stroke="var(--accent)" stroke-width="2"></line>';
+    s += '<line x1="' + (cx + Rr) + '" y1="' + topY + '" x2="' + (cx + Rr) + '" y2="' + botY + '" stroke="var(--accent)" stroke-width="2"></line>';
+    s += '<ellipse cx="' + cx + '" cy="' + botY + '" rx="' + Rr + '" ry="' + ellipseRy + '" fill="var(--accent)" fill-opacity="0.22" stroke="var(--accent)" stroke-width="2"></ellipse>';
+    s += '<path d="M ' + (cx - Rr) + ' ' + topY + ' A ' + Rr + ' ' + ellipseRy + ' 0 0 0 ' + (cx + Rr) + ' ' + topY + '" fill="none" stroke="var(--accent)" stroke-width="2"></path>';
+    s += '<path d="M ' + (cx - Rr) + ' ' + topY + ' A ' + Rr + ' ' + ellipseRy + ' 0 0 1 ' + (cx + Rr) + ' ' + topY + '" fill="var(--accent)" fill-opacity="0.3" stroke="var(--accent)" stroke-width="2"></path>';
+    s += '<line x1="' + cx + '" y1="' + topY + '" x2="' + (cx + Rr) + '" y2="' + topY + '" stroke="' + GEO_INK + '" stroke-width="1.6"></line>';
+    s += '<text x="' + (cx + Rr / 2) + '" y="' + (topY - 6) + '" font-size="13" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">r = ' + r + '</text>';
+    s += '<text x="' + (cx + Rr + 12) + '" y="' + ((topY + botY) / 2) + '" font-size="13" text-anchor="start" fill="var(--accent)" font-weight="900">h = ' + h + '</text>';
+    s += '</svg>';
+    return s;
+  }
+
+  /* ---------------- regular polygon (GSR.5 'symmetry' bank) ---------------- */
+  function regularPolygonSVG(sides) {
+    var W = 220, H = 200, cx = 110, cy = 100, R0 = 80;
+    var pts = [];
+    for (var i = 0; i < sides; i++) {
+      var a = -Math.PI / 2 + i * 2 * Math.PI / sides;
+      pts.push((cx + R0 * Math.cos(a)).toFixed(1) + ',' + (cy + R0 * Math.sin(a)).toFixed(1));
+    }
+    return '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="polygon">' +
+      '<polygon points="' + pts.join(' ') + '" fill="var(--accent)" fill-opacity="0.16" stroke="var(--accent)" stroke-width="2.2"></polygon></svg>';
+  }
+
+  /* ---------------- right triangle (GSR.6) ----------------
+     Right angle always at the leg1/leg2 corner (bottom-left). opts.angleAt
+     'leg1end' puts the labeled acute angle at the far end of leg1 (bottom
+     right); 'leg2end' puts it at the top (far end of leg2). */
+  function rightTriangleSVG(leg1, leg2, hyp, opts) {
+    opts = opts || {};
+    var W = 300, H = 230;
+    var Ax = 55, Ay = 190;          // right-angle vertex
+    var maxLeg = Math.max(leg1, leg2);
+    var sc = Math.min(190 / leg1, 140 / leg2);
+    var l1 = leg1 * sc, l2 = leg2 * sc;
+    var Bx = Ax + l1, By = Ay;      // end of leg1 (horizontal)
+    var Cx = Ax, Cy = Ay - l2;      // end of leg2 (vertical)
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="right triangle diagram">';
+    s += '<polygon points="' + Ax + ',' + Ay + ' ' + Bx + ',' + By + ' ' + Cx + ',' + Cy + '" fill="var(--accent)" fill-opacity="0.14" stroke="var(--accent)" stroke-width="2.2"></polygon>';
+    s += '<rect x="' + Ax + '" y="' + (Ay - 12) + '" width="12" height="12" fill="none" stroke="' + GEO_INK + '" stroke-width="1.6"></rect>';
+    s += '<text x="' + ((Ax + Bx) / 2) + '" y="' + (Ay + 20) + '" font-size="13.5" text-anchor="middle" fill="' + GEO_INK + '" font-weight="900">' + (opts.leg1Label != null ? opts.leg1Label : leg1) + '</text>';
+    s += '<text x="' + (Ax - 14) + '" y="' + ((Ay + Cy) / 2) + '" font-size="13.5" text-anchor="end" fill="' + GEO_INK + '" font-weight="900">' + (opts.leg2Label != null ? opts.leg2Label : leg2) + '</text>';
+    s += '<text x="' + ((Bx + Cx) / 2 + 16) + '" y="' + ((By + Cy) / 2 - 4) + '" font-size="13.5" text-anchor="start" fill="var(--accent)" font-weight="900">' + (opts.hypLabel != null ? opts.hypLabel : hyp) + '</text>';
+    if (opts.angleAt === 'leg1end') {
+      s += '<text x="' + (Bx - 30) + '" y="' + (By - 10) + '" font-size="15" text-anchor="middle" fill="' + GEO_MUTED + '" font-weight="900">' + opts.angleLabel + '</text>';
+    } else if (opts.angleAt === 'leg2end') {
+      s += '<text x="' + (Cx + 22) + '" y="' + (Cy + 16) + '" font-size="15" text-anchor="middle" fill="' + GEO_MUTED + '" font-weight="900">' + opts.angleLabel + '</text>';
+    }
+    s += '</svg>';
+    return s;
+  }
+
+  /* ---------------- coordinate grid plotter (GSR.5 transformations / GSR.7 coordinate geometry) ----------------
+     One shared, parameterized grid renderer rather than four near-duplicate
+     ones — same "one source of truth" instinct as PSR's shared
+     generateCategoricalData(). bounds:{lo,hi} applies to both axes
+     (square grid). opts.polygons:[{pts:[[x,y]...], color, dashed}],
+     opts.points:[{x,y,label,color}], opts.segments:[{x1,y1,x2,y2,dashed,color}]. */
+  function coordGridSVG(bounds, opts) {
+    opts = opts || {};
+    var lo = bounds.lo, hi = bounds.hi;
+    var W = 300, H = 300, pad = 24;
+    var span = hi - lo;
+    var plot = W - 2 * pad;
+    var scale = plot / span;
+    function X(x) { return pad + (x - lo) * scale; }
+    function Y(y) { return H - pad - (y - lo) * scale; }
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="coordinate grid">';
+    for (var g = Math.ceil(lo); g <= hi; g++) {
+      var gx = X(g), gy = Y(g);
+      s += '<line x1="' + gx.toFixed(1) + '" y1="' + pad + '" x2="' + gx.toFixed(1) + '" y2="' + (H - pad) + '" stroke="#ecdcc0" stroke-width="1"></line>';
+      s += '<line x1="' + pad + '" y1="' + gy.toFixed(1) + '" x2="' + (W - pad) + '" y2="' + gy.toFixed(1) + '" stroke="#ecdcc0" stroke-width="1"></line>';
+    }
+    s += '<line x1="' + X(lo).toFixed(1) + '" y1="' + Y(0).toFixed(1) + '" x2="' + X(hi).toFixed(1) + '" y2="' + Y(0).toFixed(1) + '" stroke="' + GEO_MUTED + '" stroke-width="1.6"></line>';
+    s += '<line x1="' + X(0).toFixed(1) + '" y1="' + Y(lo).toFixed(1) + '" x2="' + X(0).toFixed(1) + '" y2="' + Y(hi).toFixed(1) + '" stroke="' + GEO_MUTED + '" stroke-width="1.6"></line>';
+    (opts.segments || []).forEach(function (sg) {
+      s += '<line x1="' + X(sg.x1).toFixed(1) + '" y1="' + Y(sg.y1).toFixed(1) + '" x2="' + X(sg.x2).toFixed(1) + '" y2="' + Y(sg.y2).toFixed(1) + '" stroke="' + (sg.color || GEO_MUTED) + '" stroke-width="1.8"' + (sg.dashed ? ' stroke-dasharray="4,3"' : '') + '></line>';
+    });
+    (opts.polygons || []).forEach(function (poly) {
+      var pts = poly.pts.map(function (p) { return X(p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1); }).join(' ');
+      var tag = poly.pts.length > 2 ? 'polygon' : 'line';
+      if (tag === 'polygon') {
+        s += '<polygon points="' + pts + '" fill="' + (poly.color || 'var(--accent)') + '" fill-opacity="0.18" stroke="' + (poly.color || 'var(--accent)') + '" stroke-width="2"' + (poly.dashed ? ' stroke-dasharray="4,3"' : '') + '></polygon>';
+      }
+      poly.pts.forEach(function (p) {
+        s += '<circle cx="' + X(p[0]).toFixed(1) + '" cy="' + Y(p[1]).toFixed(1) + '" r="3" fill="' + (poly.color || 'var(--accent)') + '"></circle>';
+      });
+    });
+    (opts.points || []).forEach(function (p) {
+      s += '<circle cx="' + X(p.x).toFixed(1) + '" cy="' + Y(p.y).toFixed(1) + '" r="4.5" fill="' + (p.color || 'var(--accent)') + '"></circle>';
+      if (p.label) s += '<text x="' + (X(p.x) + 8).toFixed(1) + '" y="' + (Y(p.y) - 8).toFixed(1) + '" font-size="12.5" fill="' + GEO_INK + '" font-weight="900">' + p.label + '</text>';
+    });
+    s += '</svg>';
+    return s;
+  }
+
+  /* ---------------- grid-square estimation diagram (GSR.4 'estimate') ----------------
+     An irregular but fully-connected region built from whole unit cells
+     (a random-walk polyomino), so "estimate by counting squares" always
+     has an exact, unambiguous integer answer — see the design note in
+     tsi_gsr_tweaking_log.md for why partial/half cells were left out of
+     this first pass. */
+  function gridEstimateSVG(cells, cols, rows) {
+    var CELL = 34, pad = 10;
+    var W = cols * CELL + 2 * pad, H = rows * CELL + 2 * pad;
+    var set = {}; cells.forEach(function (c) { set[c[0] + ',' + c[1]] = true; });
+    var s = '<svg class="svgWrap" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="grid estimation diagram">';
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        var x = pad + c * CELL, y = pad + r * CELL;
+        var on = !!set[c + ',' + r];
+        s += '<rect x="' + x + '" y="' + y + '" width="' + CELL + '" height="' + CELL + '" fill="' + (on ? 'var(--accent)' : '#fff') + '" fill-opacity="' + (on ? '0.42' : '1') + '" stroke="#ecdcc0" stroke-width="1"></rect>';
+      }
+    }
+    s += '</svg>';
+    return s;
+  }
+
+  /* ---------------- shuffle (Fisher-Yates), first needed by GSR (GSR.1 distractor
+     order, GSR.5 congruent/similar side-list order) — same situation PSR was in
+     versus AR/QR, per Part 6 #10 don't-port-unused-helpers reasoning. ---------------- */
+  function shuffle(arr) { var a = arr.slice(); for (var i = a.length - 1; i > 0; i--) { var j = ri(0, i); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+  /* =====================================================================
+     GSR.1 — Identify common units of measurement.
+     ===================================================================== */
+  var GSR1_CATS = ['length', 'weight', 'capacity', 'temp', 'time'];
+  var GSR1_CAT_LABEL = { length: 'Length', weight: 'Weight or Mass', capacity: 'Capacity or Volume', temp: 'Temperature', time: 'Time' };
+  var GSR1_UNIT_POOL = [
+    { name: 'inch', cat: 'length' }, { name: 'foot', cat: 'length' }, { name: 'yard', cat: 'length' }, { name: 'mile', cat: 'length' },
+    { name: 'centimeter', cat: 'length' }, { name: 'meter', cat: 'length' }, { name: 'kilometer', cat: 'length' }, { name: 'millimeter', cat: 'length' },
+    { name: 'ounce', cat: 'weight' }, { name: 'pound', cat: 'weight' }, { name: 'ton', cat: 'weight' }, { name: 'gram', cat: 'weight' }, { name: 'kilogram', cat: 'weight' }, { name: 'milligram', cat: 'weight' },
+    { name: 'cup', cat: 'capacity' }, { name: 'pint', cat: 'capacity' }, { name: 'quart', cat: 'capacity' }, { name: 'gallon', cat: 'capacity' }, { name: 'fluid ounce', cat: 'capacity' }, { name: 'milliliter', cat: 'capacity' }, { name: 'liter', cat: 'capacity' },
+    { name: 'degree Fahrenheit', cat: 'temp' }, { name: 'degree Celsius', cat: 'temp' },
+    { name: 'second', cat: 'time' }, { name: 'minute', cat: 'time' }, { name: 'hour', cat: 'time' }, { name: 'day', cat: 'time' }
+  ];
+  var GSR1_SCENARIOS = [
+    { desc: 'the width of a paperback book', correct: 'inches', distractors: ['miles', 'gallons', 'tons'] },
+    { desc: 'the height of a classroom door', correct: 'feet', distractors: ['miles', 'ounces', 'liters'] },
+    { desc: 'the length of a soccer field', correct: 'yards', distractors: ['miles', 'quarts', 'pounds'] },
+    { desc: 'the distance between two cities', correct: 'miles', distractors: ['inches', 'cups', 'ounces'] },
+    { desc: 'the weight of an apple', correct: 'ounces', distractors: ['tons', 'liters', 'feet'] },
+    { desc: 'the weight of a bag of flour', correct: 'pounds', distractors: ['tons', 'milliliters', 'inches'] },
+    { desc: 'the weight of a loaded pickup truck', correct: 'tons', distractors: ['ounces', 'milliliters', 'inches'] },
+    { desc: 'the amount of medicine in a spoon', correct: 'milliliters', distractors: ['gallons', 'pounds', 'miles'] },
+    { desc: 'the capacity of a coffee mug', correct: 'cups', distractors: ['gallons', 'tons', 'miles'] },
+    { desc: 'the amount of gas in a car\u2019s tank', correct: 'gallons', distractors: ['ounces', 'miles', 'degrees'] },
+    { desc: 'the temperature of a summer afternoon', correct: 'degrees Fahrenheit', distractors: ['pounds', 'liters', 'feet'] },
+    { desc: 'the time it takes to boil an egg', correct: 'minutes', distractors: ['miles', 'pounds', 'liters'] },
+    { desc: 'the length of a marathon race', correct: 'miles', distractors: ['inches', 'cups', 'grams'] },
+    { desc: 'the weight of a small dog', correct: 'pounds', distractors: ['tons', 'liters', 'feet'] },
+    { desc: 'the thickness of a phone', correct: 'millimeters', distractors: ['kilometers', 'liters', 'kilograms'] },
+    { desc: 'the amount of water in a swimming pool', correct: 'gallons', distractors: ['pounds', 'feet', 'degrees'] }
+  ];
+  function genGSR1_category() {
+    var u = pick(GSR1_UNIT_POOL);
+    return { kind: 'category', unit: u, answer: u.cat };
+  }
+  function genGSR1_appropriate() {
+    var sc = pick(GSR1_SCENARIOS);
+    var opts = shuffle([sc.correct].concat(sc.distractors));
+    return { kind: 'appropriate', scenario: sc, opts: opts, answer: sc.correct };
+  }
+  function genGSR1(mode) {
+    var kind = mode === 'mixed' ? pick(['category', 'appropriate']) : mode;
+    return kind === 'category' ? genGSR1_category() : genGSR1_appropriate();
+  }
+  function GSR1Prompt(p) {
+    if (p.kind === 'category') {
+      return '<div class="qQuestion">What does a <b style="color:var(--accent)">' + p.unit.name + '</b> primarily measure?</div>';
+    }
+    return '<div class="qQuestion">Which unit would be most reasonable for measuring <b style="color:var(--accent)">' + p.scenario.desc + '</b>?</div>';
+  }
+  function GSR1AnswerHTML(p) {
+    if (p.kind === 'category') {
+      var opts = GSR1_CATS.map(function (c) { return { v: c, label: GSR1_CAT_LABEL[c] }; });
+      return choiceNHTML('gsr1Choice', opts);
+    }
+    var opts2 = p.opts.map(function (u) { return { v: u, label: u }; });
+    return choiceNHTML('gsr1Choice', opts2);
+  }
+  function GSR1Check(p, ans) { if (!ans) return false; return ans.c === p.answer; }
+  function GSR1Hints(p) {
+    if (p.kind === 'category') return '<p>Think about what kind of quantity this unit describes: how long/far, how heavy, how much liquid it holds, how hot it is, or how much time passes.</p>';
+    return '<p>Picture the actual size of the thing being measured, then think about which unit would give a reasonably-sized number \u2014 not a tiny fraction and not a huge one.</p>';
+  }
+  function GSR1Steps(p) {
+    if (p.kind === 'category') {
+      return '<ol class="stepList"><li>A ' + p.unit.name + ' is a unit of ' + GSR1_CAT_LABEL[p.answer].toLowerCase() + '.</li></ol>';
+    }
+    return '<ol class="stepList"><li>' + p.scenario.desc.charAt(0).toUpperCase() + p.scenario.desc.slice(1) + ' is best measured in <b>' + p.answer + '</b> \u2014 the other choices would give an unreasonably large or small number for this situation.</li></ol>';
+  }
+
+  /* =====================================================================
+     GSR.2 — Identify and define types of angles.
+     ===================================================================== */
+  function classifyAngle(deg) {
+    if (deg === 90) return 'right';
+    if (deg === 180) return 'straight';
+    if (deg < 90) return 'acute';
+    if (deg < 180) return 'obtuse';
+    return 'reflex';
+  }
+  var GSR2_ANGLE_LABEL = { acute: 'Acute', right: 'Right', obtuse: 'Obtuse', straight: 'Straight', reflex: 'Reflex' };
+  function genGSR2_classify() {
+    var bucket = pick(['acute', 'right', 'obtuse', 'straight', 'reflex']);
+    var deg;
+    if (bucket === 'acute') deg = ri(10, 85);
+    else if (bucket === 'right') deg = 90;
+    else if (bucket === 'obtuse') deg = ri(95, 175);
+    else if (bucket === 'straight') deg = 180;
+    else deg = ri(185, 350);
+    return { kind: 'classify', deg: deg, answer: classifyAngle(deg) };
+  }
+  var GSR2_PAIR_LABEL = { complementary: 'Complementary', supplementary: 'Supplementary', vertical: 'Vertical' };
+  function genGSR2_pairs() {
+    var relation = pick(['complementary', 'supplementary', 'vertical']);
+    var ask = pick(['value', 'name']);
+    if (relation === 'vertical') {
+      var d1 = ri(20, 160), d2 = ri(10, Math.max(10, 179 - d1));
+      var giveVertical = Math.random() < 0.5;
+      var known = d1, target = d1; /* vertical angle equals the known one */
+      return { kind: 'pairs', relation: relation, ask: 'value', deg1: d1, deg2: d2, known: known, answer: R(known, 1) };
+    }
+    var sum = relation === 'complementary' ? 90 : 180;
+    var a = relation === 'complementary' ? ri(10, 80) : ri(10, 170);
+    var b = sum - a;
+    if (ask === 'name') {
+      var opts3 = ['complementary', 'supplementary', 'vertical'];
+      return { kind: 'pairs', relation: relation, ask: 'name', deg1: a, deg2: b, answer: relation };
+    }
+    return { kind: 'pairs', relation: relation, ask: 'value', deg1: a, deg2: b, known: a, answer: R(b, 1) };
+  }
+  function genGSR2(mode) {
+    var kind = mode === 'mixed' ? pick(['classify', 'pairs']) : mode;
+    return kind === 'classify' ? genGSR2_classify() : genGSR2_pairs();
+  }
+  var GSR2_PAIR_OPTIONS = [{ v: 'complementary', label: 'Complementary' }, { v: 'supplementary', label: 'Supplementary' }, { v: 'vertical', label: 'Vertical' }];
+  function GSR2Prompt(p) {
+    if (p.kind === 'classify') {
+      return '<div class="qQuestion">Classify the angle shown below.</div>' + angleSVG(p.deg);
+    }
+    if (p.relation === 'vertical') {
+      return '<div class="qQuestion">The two lines below intersect, forming two pairs of vertical angles.</div>' +
+        anglePairSVG('vertical', p.deg1, p.deg2) +
+        '<div class="qQuestion" style="margin-top:10px">The ' + p.deg1 + '\u00b0 angle\u2019s <b style="color:var(--accent)">vertical angle</b> (directly across the intersection) measures how many degrees?</div>';
+    }
+    var chart = anglePairSVG(p.relation, p.deg1, p.deg2);
+    if (p.ask === 'name') {
+      return '<div class="qQuestion">Two adjacent angles are shown below, together forming ' + (p.relation === 'complementary' ? 'a right angle' : 'a straight line') + '.</div>' + chart +
+        '<div class="qQuestion" style="margin-top:10px">What is the relationship between these two angles called?</div>';
+    }
+    return '<div class="qQuestion">The two angles below are ' + p.relation + ' (they add up to ' + (p.relation === 'complementary' ? '90' : '180') + '\u00b0).</div>' + chart +
+      '<div class="qQuestion" style="margin-top:10px">If one angle measures <b style="color:var(--accent)">' + p.known + '\u00b0</b>, what does the other angle measure?</div>';
+  }
+  function GSR2AnswerHTML(p) {
+    if (p.kind === 'classify') {
+      var opts = ['acute', 'right', 'obtuse', 'straight', 'reflex'].map(function (k) { return { v: k, label: GSR2_ANGLE_LABEL[k] }; });
+      return choiceNHTML('gsr2Choice', opts);
+    }
+    if (p.ask === 'name') return choiceNHTML('gsr2Choice', GSR2_PAIR_OPTIONS);
+    return '<span class="ansLabel">Angle =</span><input type="text" class="in" id="ans_x" inputmode="numeric" autocomplete="off" aria-label="answer in degrees">' + sharedKbdHTML();
+  }
+  function GSR2Check(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'classify' || p.ask === 'name') return ans.c === p.answer;
+    var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer);
+  }
+  function GSR2Hints(p) {
+    if (p.kind === 'classify') return '<p>Acute: less than 90\u00b0. Right: exactly 90\u00b0. Obtuse: between 90\u00b0 and 180\u00b0. Straight: exactly 180\u00b0. Reflex: more than 180\u00b0.</p>';
+    if (p.relation === 'vertical') return '<p>Vertical angles \u2014 the pair directly across the intersection from each other \u2014 always have equal measures.</p>';
+    if (p.ask === 'name') return '<p>Complementary angles sum to 90\u00b0. Supplementary angles sum to 180\u00b0.</p>';
+    return '<p>' + (p.relation === 'complementary' ? 'Complementary angles sum to 90\u00b0 \u2014 subtract the known angle from 90.' : 'Supplementary angles sum to 180\u00b0 \u2014 subtract the known angle from 180.') + '</p>';
+  }
+  function GSR2Steps(p) {
+    if (p.kind === 'classify') {
+      return '<ol class="stepList"><li>The angle measures ' + p.deg + '\u00b0.</li><li>That falls in the <b>' + GSR2_ANGLE_LABEL[p.answer] + '</b> range.</li></ol>';
+    }
+    if (p.relation === 'vertical') {
+      return '<ol class="stepList"><li>Vertical angles are always equal.</li><li>The vertical angle also measures ' + p.deg1 + '\u00b0.</li></ol>';
+    }
+    if (p.ask === 'name') {
+      var sum = p.relation === 'complementary' ? 90 : 180;
+      return '<ol class="stepList"><li>' + p.deg1 + '\u00b0 + ' + p.deg2 + '\u00b0 = ' + sum + '\u00b0</li><li>Two angles that sum to ' + sum + '\u00b0 are called <b>' + GSR2_PAIR_LABEL[p.relation] + '</b>.</li></ol>';
+    }
+    var sum2 = p.relation === 'complementary' ? 90 : 180;
+    return '<ol class="stepList"><li>' + sum2 + '\u00b0 \u2212 ' + p.known + '\u00b0 = ' + p.answer.n + '\u00b0</li></ol>';
+  }
+
+  /* =====================================================================
+     GSR.3 — Convert units within systems of measurement.
+     ===================================================================== */
+  var GSR3_CATEGORY_TABLES = {
+    length: ['metric_length', 'customary_length'],
+    weight: ['metric_weight', 'customary_weight'],
+    capacity: ['metric_capacity', 'customary_capacity'],
+    time: ['time']
+  };
+  var GSR3_CAT_LABEL = { length: 'Length', weight: 'Weight or Mass', capacity: 'Capacity or Volume', time: 'Time' };
+  /* typical "from" quantity range per unit, so a generated problem's
+     starting number always looks realistic for that unit. */
+  var GSR3_RANGE = {
+    millimeter: [10, 500], centimeter: [5, 300], meter: [1, 50], kilometer: [1, 20],
+    inch: [6, 96], foot: [2, 60], yard: [2, 50], mile: [1, 20],
+    milligram: [100, 5000], gram: [5, 500], kilogram: [1, 50],
+    ounce: [2, 64], pound: [1, 50], ton: [1, 10],
+    milliliter: [50, 1000], liter: [1, 50],
+    cup: [1, 16], pint: [1, 20], quart: [1, 20], gallon: [1, 20],
+    second: [10, 300], minute: [1, 180], hour: [1, 48], day: [1, 14]
+  };
+  /* customary_length (in/ft/yd/mi) is the one table whose factors carry a
+     3/11 in addition to 2/5 — restricted to ADJACENT pairs so a generated
+     conversion stays the standard step-by-step one TSIA2 actually teaches
+     (in<->ft, ft<->yd, yd<->mi) instead of a cross-table in<->mi jump.
+     Every other table here is built entirely from powers of 2 and 5
+     (metric's decimal prefixes; customary weight 16/32000 and capacity
+     1/2/4/16 are also pure powers of 2), so any pair in those tables
+     always resolves to a clean terminating decimal or a simple fraction
+     — no adjacency restriction needed. */
+  function genGSR3_forCategory(cat) {
+    var tableKey = pick(GSR3_CATEGORY_TABLES[cat]);
+    var t = UNIT_TABLES[tableKey];
+    var order = Object.keys(t.units);
+    var adjacentOnly = (tableKey === 'customary_length');
+    var fromU, toU;
+    if (adjacentOnly) {
+      var i = ri(0, order.length - 2);
+      var lo2 = order[i], hi2 = order[i + 1];
+      if (Math.random() < 0.5) { fromU = lo2; toU = hi2; } else { fromU = hi2; toU = lo2; }
+    } else {
+      fromU = pick(order);
+      do { toU = pick(order); } while (toU === fromU);
+    }
+    var range = GSR3_RANGE[fromU] || [1, 20];
+    var value = ri(range[0], range[1]);
+    var ratio = unitFactorRatio(tableKey, fromU, toU);
+    var answer = R(value * ratio.n, ratio.d);
+    return { cat: cat, tableKey: tableKey, fromU: fromU, toU: toU, value: value, ratio: ratio, answer: answer };
+  }
+  function genGSR3(mode) {
+    var cat = mode === 'mixed' ? pick(['length', 'weight', 'capacity', 'time']) : mode;
+    return genGSR3_forCategory(cat);
+  }
+  function GSR3Prompt(p) {
+    return '<div class="qQuestion">Convert:</div>' +
+      '<div class="eqLine">' + p.value + ' ' + UNIT_LABEL[p.fromU] + ' = ?  ' + UNIT_SHORT[p.toU] + '</div>';
+  }
+  function GSR3AnswerHTML(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML() + '<div class="stepsNote" style="margin:6px 0 0">If it doesn\u2019t divide evenly, enter your answer as a fraction (e.g. 5/12).</div>'; }
+  function GSR3Check(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
+  function GSR3Hints(p) {
+    return '<p>1 ' + UNIT_SHORT[p.fromU] + ' = ' + ratStr(p.ratio) + ' ' + UNIT_SHORT[p.toU] + '. Multiply the given amount by that same factor.</p>';
+  }
+  function GSR3Steps(p) {
+    return '<ol class="stepList"><li>1 ' + UNIT_SHORT[p.fromU] + ' = ' + ratStr(p.ratio) + ' ' + UNIT_SHORT[p.toU] + '</li>' +
+      '<li>' + p.value + ' \u00d7 ' + ratStr(p.ratio) + ' = ' + ratHTMLorInt(p.answer) + ' ' + UNIT_SHORT[p.toU] + '</li></ol>';
+  }
+
+  /* =====================================================================
+     GSR.4 — Find perimeter, area, surface area, and volume using a
+     variety of methods, including estimation.
+     ===================================================================== */
+
+  /* ---------------- perimeter ---------------- */
+  function genGSR4_perimeter() {
+    var shape = pick(['rectangle', 'square', 'triangle', 'quadrilateral']);
+    if (shape === 'square') {
+      var s = ri(3, 20);
+      return { kind: 'perimeter', shape: shape, s: s, answer: R(4 * s, 1) };
+    }
+    if (shape === 'rectangle') {
+      var l = ri(4, 30), w = ri(3, Math.max(3, l - 1));
+      if (w === l) w = w - 1 || 1;
+      return { kind: 'perimeter', shape: shape, l: l, w: w, answer: R(2 * (l + w), 1) };
+    }
+    if (shape === 'triangle') {
+      var t = pickTriple();
+      var sc = pick([1, 1, 1, 2]);
+      var a = t[0] * sc, b = t[1] * sc, c = t[2] * sc;
+      return { kind: 'perimeter', shape: shape, a: a, b: b, c: c, answer: R(a + b + c, 1) };
+    }
+    var sides = [ri(3, 12), ri(3, 12), ri(3, 12), ri(3, 12)];
+    return { kind: 'perimeter', shape: shape, sides: sides, answer: R(sides[0] + sides[1] + sides[2] + sides[3], 1) };
+  }
+  function GSR4_perimeterPrompt(p) {
+    if (p.shape === 'square') return '<div class="qQuestion">Find the perimeter of this square.</div>' + rectangleSVG(p.s, p.s);
+    if (p.shape === 'rectangle') return '<div class="qQuestion">Find the perimeter of this rectangle.</div>' + rectangleSVG(p.l, p.w);
+    if (p.shape === 'triangle') return '<div class="qQuestion">Find the perimeter of this triangle.</div>' + triangleSVG('sides', { a: p.a, b: p.b, c: p.c });
+    return '<div class="qQuestion">Find the perimeter of this quadrilateral, with sides ' + p.sides.join(', ') + '.</div>';
+  }
+  function GSR4_perimeterSteps(p) {
+    if (p.shape === 'square') return '<ol class="stepList"><li>Perimeter = 4 \u00d7 side = 4 \u00d7 ' + p.s + ' = ' + p.answer.n + '</li></ol>';
+    if (p.shape === 'rectangle') return '<ol class="stepList"><li>Perimeter = 2(l + w) = 2(' + p.l + ' + ' + p.w + ') = ' + p.answer.n + '</li></ol>';
+    if (p.shape === 'triangle') return '<ol class="stepList"><li>Perimeter = ' + p.a + ' + ' + p.b + ' + ' + p.c + ' = ' + p.answer.n + '</li></ol>';
+    return '<ol class="stepList"><li>Perimeter = ' + p.sides.join(' + ') + ' = ' + p.answer.n + '</li></ol>';
+  }
+
+  /* ---------------- area ---------------- */
+  function genGSR4_area() {
+    var shape = pick(['rectangle', 'square', 'triangle', 'parallelogram', 'trapezoid', 'circle']);
+    if (shape === 'square') { var s = ri(3, 20); return { kind: 'area', shape: shape, s: s, answer: R(s * s, 1) }; }
+    if (shape === 'rectangle') { var l = ri(4, 30), w = ri(3, 25); return { kind: 'area', shape: shape, l: l, w: w, answer: R(l * w, 1) }; }
+    if (shape === 'triangle') {
+      var base = ri(4, 24), height = ri(3, 20);
+      return { kind: 'area', shape: shape, base: base, height: height, answer: R(base * height, 2) };
+    }
+    if (shape === 'parallelogram') {
+      var base2 = ri(4, 24), height2 = ri(3, 20), side = height2 + ri(1, 4);
+      return { kind: 'area', shape: shape, base: base2, height: height2, side: side, answer: R(base2 * height2, 1) };
+    }
+    if (shape === 'trapezoid') {
+      var b1 = ri(4, 16), b2 = ri(4, 16), height3 = ri(3, 16);
+      var leftSide = ri(3, 12), rightSide = ri(3, 12);
+      return { kind: 'area', shape: shape, b1: b1, b2: b2, height: height3, leftSide: leftSide, rightSide: rightSide, answer: R((b1 + b2) * height3, 2) };
+    }
+    var r = ri(2, 14);
+    return { kind: 'area', shape: 'circle', r: r, answer: R(314 * r * r, 100) };
+  }
+  function GSR4_areaPrompt(p) {
+    if (p.shape === 'square') return '<div class="qQuestion">Find the area of this square.</div>' + rectangleSVG(p.s, p.s);
+    if (p.shape === 'rectangle') return '<div class="qQuestion">Find the area of this rectangle.</div>' + rectangleSVG(p.l, p.w);
+    if (p.shape === 'triangle') return '<div class="qQuestion">Find the area of this triangle.</div>' + triangleSVG('baseHeight', { base: p.base, height: p.height });
+    if (p.shape === 'parallelogram') return '<div class="qQuestion">Find the area of this parallelogram.</div>' + parallelogramSVG(p.base, p.height, p.side);
+    if (p.shape === 'trapezoid') return '<div class="qQuestion">Find the area of this trapezoid.</div>' + trapezoidSVG(p.b1, p.b2, p.height, p.leftSide, p.rightSide);
+    return '<div class="qQuestion">Find the area of this circle. Use 3.14 for \u03c0.</div>' + circleSVG(p.r, 'r = ' + p.r);
+  }
+  function GSR4_areaSteps(p) {
+    if (p.shape === 'square') return '<ol class="stepList"><li>Area = side\u00b2 = ' + p.s + '\u00b2 = ' + p.answer.n + '</li></ol>';
+    if (p.shape === 'rectangle') return '<ol class="stepList"><li>Area = l \u00d7 w = ' + p.l + ' \u00d7 ' + p.w + ' = ' + p.answer.n + '</li></ol>';
+    if (p.shape === 'triangle') return '<ol class="stepList"><li>Area = \u00bd \u00d7 base \u00d7 height = \u00bd \u00d7 ' + p.base + ' \u00d7 ' + p.height + ' = ' + ratHTMLorInt(p.answer) + '</li></ol>';
+    if (p.shape === 'parallelogram') return '<ol class="stepList"><li>Area = base \u00d7 height = ' + p.base + ' \u00d7 ' + p.height + ' = ' + p.answer.n + '</li></ol>';
+    if (p.shape === 'trapezoid') return '<ol class="stepList"><li>Area = \u00bd(b\u2081 + b\u2082) \u00d7 h = \u00bd(' + p.b1 + ' + ' + p.b2 + ') \u00d7 ' + p.height + ' = ' + ratHTMLorInt(p.answer) + '</li></ol>';
+    return '<ol class="stepList"><li>Area = \u03c0r\u00b2 \u2248 3.14 \u00d7 ' + p.r + '\u00b2 = ' + ratHTMLorInt(p.answer) + '</li></ol>';
+  }
+
+  /* ---------------- surface area & volume ---------------- */
+  function genGSR4_solid(kindWord) {
+    var shape = pick(['rectPrism', 'cube', 'cylinder']);
+    if (shape === 'cube') {
+      var s = ri(2, 12);
+      var sa = R(6 * s * s, 1), vol = R(s * s * s, 1);
+      return { kind: kindWord, shape: shape, s: s, sa: sa, vol: vol };
+    }
+    if (shape === 'rectPrism') {
+      var l = ri(3, 15), w = ri(2, 12), h = ri(2, 12);
+      var sa2 = R(2 * (l * w + l * h + w * h), 1), vol2 = R(l * w * h, 1);
+      return { kind: kindWord, shape: shape, l: l, w: w, h: h, sa: sa2, vol: vol2 };
+    }
+    var r = ri(2, 10), h2 = ri(3, 16);
+    var sa3 = R(628 * r * (h2 + r), 100), vol3 = R(314 * r * r * h2, 100);
+    return { kind: kindWord, shape: shape, r: r, h: h2, sa: sa3, vol: vol3 };
+  }
+  function genGSR4_surfaceArea() { var d = genGSR4_solid('surfaceArea'); d.answer = d.sa; return d; }
+  function genGSR4_volume() { var d = genGSR4_solid('volume'); d.answer = d.vol; return d; }
+  function GSR4_solidDiagram(p) {
+    if (p.shape === 'cube') return rectPrismSVG(p.s, p.s, p.s);
+    if (p.shape === 'rectPrism') return rectPrismSVG(p.l, p.w, p.h);
+    return cylinderSVG(p.r, p.h);
+  }
+  function GSR4_surfaceAreaPrompt(p) {
+    return '<div class="qQuestion">Find the surface area of this ' + (p.shape === 'cylinder' ? 'cylinder. Use 3.14 for \u03c0.' : (p.shape === 'cube' ? 'cube.' : 'rectangular prism.')) + '</div>' + GSR4_solidDiagram(p);
+  }
+  function GSR4_surfaceAreaSteps(p) {
+    if (p.shape === 'cube') return '<ol class="stepList"><li>SA = 6s\u00b2 = 6 \u00d7 ' + p.s + '\u00b2 = ' + p.answer.n + '</li></ol>';
+    if (p.shape === 'rectPrism') return '<ol class="stepList"><li>SA = 2(lw + lh + wh) = 2((' + p.l + '\u00d7' + p.w + ') + (' + p.l + '\u00d7' + p.h + ') + (' + p.w + '\u00d7' + p.h + ')) = ' + p.answer.n + '</li></ol>';
+    return '<ol class="stepList"><li>SA = 2\u03c0r(h + r) \u2248 2 \u00d7 3.14 \u00d7 ' + p.r + ' \u00d7 (' + p.h + ' + ' + p.r + ') = ' + ratHTMLorInt(p.answer) + '</li></ol>';
+  }
+  function GSR4_volumePrompt(p) {
+    return '<div class="qQuestion">Find the volume of this ' + (p.shape === 'cylinder' ? 'cylinder. Use 3.14 for \u03c0.' : (p.shape === 'cube' ? 'cube.' : 'rectangular prism.')) + '</div>' + GSR4_solidDiagram(p);
+  }
+  function GSR4_volumeSteps(p) {
+    if (p.shape === 'cube') return '<ol class="stepList"><li>V = s\u00b3 = ' + p.s + '\u00b3 = ' + p.answer.n + '</li></ol>';
+    if (p.shape === 'rectPrism') return '<ol class="stepList"><li>V = l \u00d7 w \u00d7 h = ' + p.l + ' \u00d7 ' + p.w + ' \u00d7 ' + p.h + ' = ' + p.answer.n + '</li></ol>';
+    return '<ol class="stepList"><li>V = \u03c0r\u00b2h \u2248 3.14 \u00d7 ' + p.r + '\u00b2 \u00d7 ' + p.h + ' = ' + ratHTMLorInt(p.answer) + '</li></ol>';
+  }
+
+  /* ---------------- estimate (grid-square counting) ---------------- */
+  function genGSR4_estimate() {
+    var COLS = 7, ROWS = 6;
+    var visited, guard;
+    do {
+      visited = {};
+      var cx = ri(1, COLS - 2), cy = ri(1, ROWS - 2);
+      var stack = [[cx, cy]]; visited[cx + ',' + cy] = true;
+      guard = 0;
+      var target = ri(10, 16);
+      while (Object.keys(visited).length < target && guard < 400) {
+        guard++;
+        var cur = stack[stack.length - 1];
+        var dirs = shuffle([[1, 0], [-1, 0], [0, 1], [0, -1]]);
+        var moved = false;
+        for (var k = 0; k < dirs.length; k++) {
+          var nx = cur[0] + dirs[k][0], ny = cur[1] + dirs[k][1];
+          if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+          var key = nx + ',' + ny;
+          if (visited[key]) continue;
+          visited[key] = true; stack.push([nx, ny]); moved = true; break;
+        }
+        if (!moved) stack.pop();
+        if (stack.length === 0) break;
+      }
+    } while (Object.keys(visited).length < 8);
+    var cells = Object.keys(visited).map(function (k) { var xy = k.split(','); return [+xy[0], +xy[1]]; });
+    return { kind: 'estimate', cells: cells, cols: COLS, rows: ROWS, answer: R(cells.length, 1) };
+  }
+  function GSR4_estimatePrompt(p) {
+    return '<div class="qQuestion">Estimate the area of the shaded region by counting unit squares.</div>' + gridEstimateSVG(p.cells, p.cols, p.rows);
+  }
+  function GSR4_estimateSteps(p) {
+    return '<ol class="stepList"><li>Counting every shaded unit square gives ' + p.answer.n + ' square units.</li></ol>';
+  }
+
+  function genGSR4(mode) {
+    var kind = mode === 'mixed' ? pick(['perimeter', 'area', 'surfaceArea', 'volume', 'estimate']) : mode;
+    if (kind === 'perimeter') return genGSR4_perimeter();
+    if (kind === 'area') return genGSR4_area();
+    if (kind === 'surfaceArea') return genGSR4_surfaceArea();
+    if (kind === 'volume') return genGSR4_volume();
+    return genGSR4_estimate();
+  }
+  function GSR4Prompt(p) {
+    if (p.kind === 'perimeter') return GSR4_perimeterPrompt(p);
+    if (p.kind === 'area') return GSR4_areaPrompt(p);
+    if (p.kind === 'surfaceArea') return GSR4_surfaceAreaPrompt(p);
+    if (p.kind === 'volume') return GSR4_volumePrompt(p);
+    return GSR4_estimatePrompt(p);
+  }
+  function GSR4AnswerHTML(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML(); }
+  function GSR4Check(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
+  function GSR4Hints(p) {
+    if (p.kind === 'perimeter') return '<p>Perimeter is the distance all the way around the outside \u2014 add up every side length.</p>';
+    if (p.kind === 'area') {
+      if (p.shape === 'circle') return '<p>Area of a circle = \u03c0r\u00b2. Use 3.14 for \u03c0.</p>';
+      if (p.shape === 'triangle') return '<p>Area of a triangle = \u00bd \u00d7 base \u00d7 height.</p>';
+      if (p.shape === 'trapezoid') return '<p>Area of a trapezoid = \u00bd \u00d7 (b\u2081 + b\u2082) \u00d7 height.</p>';
+      return '<p>Area = base \u00d7 height (or length \u00d7 width).</p>';
+    }
+    if (p.kind === 'surfaceArea') return '<p>Surface area is the total area of every outside face \u2014 add up all the faces (or use the shape\u2019s surface-area formula).</p>';
+    if (p.kind === 'volume') return '<p>Volume measures how much space fills the solid \u2014 for a prism, (area of the base) \u00d7 height.</p>';
+    return '<p>Count every fully-shaded unit square in the grid.</p>';
+  }
+  function GSR4Steps(p) {
+    if (p.kind === 'perimeter') return GSR4_perimeterSteps(p);
+    if (p.kind === 'area') return GSR4_areaSteps(p);
+    if (p.kind === 'surfaceArea') return GSR4_surfaceAreaSteps(p);
+    if (p.kind === 'volume') return GSR4_volumeSteps(p);
+    return GSR4_estimateSteps(p);
+  }
+
+  /* =====================================================================
+     GSR.5 — Use transformations to investigate congruence, similarity,
+     and symmetry.
+     ===================================================================== */
+  var GSR5_BASE_SHAPES = [
+    [[1, 1], [3, 1], [2, 3]],
+    [[1, 1], [3, 1], [3, 3], [1, 3]],
+    [[1, 1], [4, 1], [2, 3]],
+    [[1, 1], [3, 2], [1, 4]]
+  ];
+  function applyTransform(pts, t) {
+    return pts.map(function (p) {
+      var x = p[0], y = p[1];
+      if (t.type === 'translation') return [x + t.dx, y + t.dy];
+      if (t.type === 'reflectionX') return [x, -y];
+      if (t.type === 'reflectionY') return [-x, y];
+      if (t.type === 'rotation') {
+        if (t.deg === 90) return [-y, x];
+        if (t.deg === 180) return [-x, -y];
+        return [y, -x]; /* 270 */
+      }
+      if (t.type === 'dilation') return [x * t.k, y * t.k];
+      return [x, y];
+    });
+  }
+  function transformLabel(t) {
+    if (t.type === 'translation') return 'Translation (' + t.dx + ', ' + t.dy + ')';
+    if (t.type === 'reflectionX') return 'Reflection over the x-axis';
+    if (t.type === 'reflectionY') return 'Reflection over the y-axis';
+    if (t.type === 'rotation') return 'Rotation ' + t.deg + '\u00b0 about the origin';
+    return 'Dilation by scale factor ' + t.k;
+  }
+  var GSR5_IDENTIFY_OPTIONS = [
+    { v: 'translation', label: 'Translation' }, { v: 'reflection', label: 'Reflection' },
+    { v: 'rotation', label: 'Rotation' }, { v: 'dilation', label: 'Dilation' }
+  ];
+  function randomTransform() {
+    var type = pick(['translation', 'reflectionX', 'reflectionY', 'rotation', 'dilation']);
+    if (type === 'translation') return { type: type, dx: nonZero(-4, 4), dy: nonZero(-4, 4) };
+    if (type === 'rotation') return { type: type, deg: pick([90, 180, 270]) };
+    if (type === 'dilation') return { type: type, k: pick([2, 3, 0.5]) };
+    return { type: type };
+  }
+  function genGSR5_identify() {
+    var shape = pick(GSR5_BASE_SHAPES);
+    var t = randomTransform();
+    var image = applyTransform(shape, t);
+    var famAnswer = (t.type === 'reflectionX' || t.type === 'reflectionY') ? 'reflection' : t.type;
+    return { kind: 'identify', shape: shape, t: t, image: image, answer: famAnswer };
+  }
+  function genGSR5_apply() {
+    var shape = pick(GSR5_BASE_SHAPES);
+    var t = randomTransform();
+    var idx = ri(0, shape.length - 1);
+    var pt = shape[idx];
+    var image = applyTransform([pt], t)[0];
+    return { kind: 'apply', t: t, pt: pt, answer: { x: R(image[0], 1), y: R(image[1], 1) } };
+  }
+  function genGSR5_congruentSimilar() {
+    var base = [ri(4, 10), ri(4, 10), ri(4, 10)].sort(function (a, b) { return a - b; });
+    if (base[0] + base[1] <= base[2]) base[2] = base[0] + base[1] - 1;
+    var variant = pick(['congruent', 'similar', 'neither']);
+    var second;
+    if (variant === 'congruent') second = base.slice();
+    else if (variant === 'similar') {
+      var k = pick([2, 3]);
+      second = base.map(function (v) { return v * k; });
+    } else {
+      /* Build a genuinely independent valid triangle rather than nudging
+         one side of `base` by a random delta — nudging risks breaking the
+         triangle inequality on the SECOND triangle (Part 6 "degenerate
+         generator outputs": e.g. base=[4,4,7], bump the 7 by +3 -> [4,4,10],
+         4+4 is not > 10). A fresh valid triple side-steps that entirely;
+         the tiny retry loop just guards against the near-impossible case
+         of it coincidentally landing on a constant ratio to `base`. */
+      var guard2 = 0, ratios;
+      do {
+        guard2++;
+        second = [ri(4, 10), ri(4, 10), ri(4, 10)].sort(function (a, b) { return a - b; });
+        if (second[0] + second[1] <= second[2]) second[2] = second[0] + second[1] - 1;
+        ratios = base.map(function (v, i) { return second[i] / v; });
+      } while (ratios[0] === ratios[1] && ratios[1] === ratios[2] && guard2 < 50);
+    }
+    return { kind: 'congruentSimilar', a: base, b: second, answer: variant };
+  }
+  var GSR5_CS_OPTIONS = [{ v: 'congruent', label: 'Congruent' }, { v: 'similar', label: 'Similar' }, { v: 'neither', label: 'Neither' }];
+  var GSR5_SYMMETRY_BANK = [
+    { name: 'equilateral triangle', svg: function () { return regularPolygonSVG(3); }, lines: 3 },
+    { name: 'square', svg: function () { return regularPolygonSVG(4); }, lines: 4 },
+    { name: 'regular pentagon', svg: function () { return regularPolygonSVG(5); }, lines: 5 },
+    { name: 'regular hexagon', svg: function () { return regularPolygonSVG(6); }, lines: 6 },
+    { name: 'regular octagon', svg: function () { return regularPolygonSVG(8); }, lines: 8 },
+    { name: 'non-square rectangle', svg: function () { return rectangleSVG(8, 4); }, lines: 2 }
+  ];
+  function genGSR5_symmetry() {
+    var item = pick(GSR5_SYMMETRY_BANK);
+    return { kind: 'symmetry', item: item, answer: R(item.lines, 1) };
+  }
+  function genGSR5(mode) {
+    var kind = mode === 'mixed' ? pick(['identify', 'apply', 'congruentSimilar', 'symmetry']) : mode;
+    if (kind === 'identify') return genGSR5_identify();
+    if (kind === 'apply') return genGSR5_apply();
+    if (kind === 'congruentSimilar') return genGSR5_congruentSimilar();
+    return genGSR5_symmetry();
+  }
+  function GSR5Prompt(p) {
+    if (p.kind === 'identify') {
+      var grid = coordGridSVG({ lo: -6, hi: 6 }, { polygons: [{ pts: p.shape, color: '#8a7358' }, { pts: p.image, color: 'var(--accent)' }] });
+      return '<div class="qQuestion">The gray figure is transformed into the orange figure below.</div>' + grid +
+        '<div class="qQuestion" style="margin-top:10px">Which transformation was applied?</div>';
+    }
+    if (p.kind === 'apply') {
+      return '<div class="qQuestion">Apply this transformation: <b style="color:var(--accent)">' + transformLabel(p.t) + '</b></div>' +
+        coordGridSVG({ lo: -6, hi: 6 }, { points: [{ x: p.pt[0], y: p.pt[1], label: 'P(' + p.pt[0] + ', ' + p.pt[1] + ')', color: '#8a7358' }] }) +
+        '<div class="qQuestion" style="margin-top:10px">What are the coordinates of the image point P\u2032?</div>';
+    }
+    if (p.kind === 'congruentSimilar') {
+      return '<div class="qQuestion">Triangle A has sides ' + p.a.join(', ') + '. Triangle B has sides ' + p.b.join(', ') + ' (corresponding sides listed in the same order).</div>' +
+        '<div class="qQuestion" style="margin-top:10px">Are the triangles congruent, similar, or neither?</div>';
+    }
+    return '<div class="qQuestion">How many lines of symmetry does this ' + p.item.name + ' have?</div>' + p.item.svg();
+  }
+  function GSR5AnswerHTML(p) {
+    if (p.kind === 'identify') return choiceNHTML('gsr5Choice', GSR5_IDENTIFY_OPTIONS);
+    if (p.kind === 'congruentSimilar') return choiceNHTML('gsr5Choice', GSR5_CS_OPTIONS);
+    if (p.kind === 'apply') {
+      return '<div class="qPart"><span class="ansLabel">x\u2032 =</span><input type="text" class="in" id="ans_px" inputmode="numeric" autocomplete="off" aria-label="x prime">' +
+        '<span class="ansLabel" style="margin-left:10px">y\u2032 =</span><input type="text" class="in" id="ans_py" inputmode="numeric" autocomplete="off" aria-label="y prime"></div>' + sharedKbdHTML();
+    }
+    return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="numeric" autocomplete="off" aria-label="answer">' + sharedKbdHTML();
+  }
+  function GSR5Check(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'identify' || p.kind === 'congruentSimilar') return ans.c === p.answer;
+    if (p.kind === 'apply') {
+      var rx = parseRat(ans.px), ry = parseRat(ans.py);
+      if (!rx || !ry) return false;
+      return req(rx, p.answer.x) && req(ry, p.answer.y);
+    }
+    var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer);
+  }
+  function GSR5Hints(p) {
+    if (p.kind === 'identify') return '<p>Translation slides the figure. Reflection flips it across a line. Rotation turns it about a point. Dilation changes its size (and the figure isn\u2019t the same size as the original).</p>';
+    if (p.kind === 'apply') return '<p>Apply the rule to the point\u2019s x- and y-coordinates one at a time.</p>';
+    if (p.kind === 'congruentSimilar') return '<p>Congruent: every corresponding side is exactly equal. Similar: every corresponding side shares the same constant ratio, but they aren\u2019t equal. Neither: no consistent ratio.</p>';
+    return '<p>A line of symmetry divides the shape into two mirror-image halves. A regular polygon with n sides has n lines of symmetry.</p>';
+  }
+  function GSR5Steps(p) {
+    if (p.kind === 'identify') {
+      return '<ol class="stepList"><li>' + transformLabel(p.t) + ' was applied.</li><li>That is a <b>' + GSR5_IDENTIFY_OPTIONS.filter(function (o) { return o.v === p.answer; })[0].label + '</b>.</li></ol>';
+    }
+    if (p.kind === 'apply') {
+      return '<ol class="stepList"><li>Rule: ' + transformLabel(p.t) + '</li><li>P(' + p.pt[0] + ', ' + p.pt[1] + ') \u2192 P\u2032(' + p.answer.x.n + ', ' + p.answer.y.n + ')</li></ol>';
+    }
+    if (p.kind === 'congruentSimilar') {
+      var ratios = p.a.map(function (v, i) { return p.b[i] / v; });
+      var allEq = ratios.every(function (r) { return r === ratios[0]; });
+      var line;
+      if (p.answer === 'congruent') line = 'Every corresponding side is equal (ratio 1 each time).';
+      else if (p.answer === 'similar') line = 'Every corresponding side has the same ratio: ' + ratios.join(', ') + '.';
+      else line = 'The side ratios (' + ratios.map(function(r){return r.toFixed(2);}).join(', ') + ') are not all equal, and the sides aren\u2019t all equal either.';
+      return '<ol class="stepList"><li>' + line + '</li><li>The triangles are <b>' + p.answer + '</b>.</li></ol>';
+    }
+    return '<ol class="stepList"><li>A regular ' + (p.item.lines >= 3 ? (p.item.lines + '-sided polygon') : 'shape') + ' has ' + p.item.lines + ' lines of symmetry.</li></ol>';
+  }
+
+  /* =====================================================================
+     GSR.6 — Apply right triangle relationships and basic trigonometry.
+     ===================================================================== */
+
+  /* ---------------- pythagorean: exact-integer missing side from a triple ---------------- */
+  function genGSR6_pythagorean() {
+    var t = pickTriple();
+    var a = t[0], b = t[1], c = t[2];
+    var findWhich = pick(['leg1', 'leg2', 'hyp']);
+    var answer = findWhich === 'leg1' ? a : findWhich === 'leg2' ? b : c;
+    return { kind: 'pythagorean', a: a, b: b, c: c, find: findWhich, answer: R(answer, 1) };
+  }
+
+  /* ---------------- ratio: exact-fraction sin/cos/tan from a triple-sided triangle ---------------- */
+  function genGSR6_ratio() {
+    var t = pickTriple();
+    var a = t[0], b = t[1], c = t[2]; /* a = leg1 (opp to angle at leg2-end), b = leg2 (opp to angle at leg1-end) */
+    var angleAt = pick(['leg1end', 'leg2end']); /* which acute vertex is labeled theta */
+    var fn = pick(['sin', 'cos', 'tan']);
+    /* angle at leg1end: opposite leg is b (the vertical leg), adjacent is a */
+    var opp = angleAt === 'leg1end' ? b : a;
+    var adj = angleAt === 'leg1end' ? a : b;
+    var answer = fn === 'sin' ? R(opp, c) : fn === 'cos' ? R(adj, c) : R(opp, adj);
+    return { kind: 'ratio', a: a, b: b, c: c, angleAt: angleAt, fn: fn, answer: answer };
+  }
+
+  /* ---------------- solve: genuine trig, one side + one acute angle, find a
+     missing side (rounded to nearest tenth) or a missing angle (rounded to
+     the nearest degree) — see tsi_gsr_tweaking_log.md for why this is the
+     one kind in GSR that grades by matched-rounding instead of exact req(). */
+  function genGSR6_solve() {
+    var ask = pick(['side', 'angle']);
+    var angleDeg = ri(15, 75);
+    var rad = angleDeg * Math.PI / 180;
+    if (ask === 'side') {
+      var given = pick(['opp', 'adj', 'hyp']);
+      var givenLen = ri(4, 20);
+      var find = pick(['opp', 'adj', 'hyp'].filter(function (x) { return x !== given; }));
+      var hyp, opp, adj;
+      if (given === 'hyp') { hyp = givenLen; opp = hyp * Math.sin(rad); adj = hyp * Math.cos(rad); }
+      else if (given === 'opp') { opp = givenLen; hyp = opp / Math.sin(rad); adj = opp / Math.tan(rad); }
+      else { adj = givenLen; hyp = adj / Math.cos(rad); opp = adj * Math.tan(rad); }
+      var trueVal = { opp: opp, adj: adj, hyp: hyp }[find];
+      var answer = roundTo(trueVal, 1);
+      return { kind: 'solve', ask: 'side', angleDeg: angleDeg, given: given, givenLen: givenLen, find: find, answer: answer };
+    }
+    /* ask === 'angle': give two of the three sides (as a consistent right
+       triangle built from a random acute angle), ask for that angle back,
+       rounded to the nearest degree. */
+    var pair = pick(['opp/adj', 'opp/hyp', 'adj/hyp']);
+    var hyp2 = ri(10, 30);
+    var opp2 = hyp2 * Math.sin(rad), adj2 = hyp2 * Math.cos(rad);
+    var s1, s2, fn2, trueDeg = angleDeg;
+    if (pair === 'opp/adj') { s1 = roundTo(opp2, 1); s2 = roundTo(adj2, 1); fn2 = 'tan'; }
+    else if (pair === 'opp/hyp') { s1 = roundTo(opp2, 1); s2 = roundTo(hyp2, 1); fn2 = 'sin'; }
+    else { s1 = roundTo(adj2, 1); s2 = roundTo(hyp2, 1); fn2 = 'cos'; }
+    var answer2 = roundTo(trueDeg, 0);
+    return { kind: 'solve', ask: 'angle', pair: pair, s1: s1, s2: s2, fn: fn2, answer: answer2 };
+  }
+  function genGSR6(mode) {
+    var kind = mode === 'mixed' ? pick(['pythagorean', 'ratio', 'solve']) : mode;
+    if (kind === 'pythagorean') return genGSR6_pythagorean();
+    if (kind === 'ratio') return genGSR6_ratio();
+    return genGSR6_solve();
+  }
+  var GSR6_SIDE_NAME = { opp: 'opposite leg', adj: 'adjacent leg', hyp: 'hypotenuse' };
+  function GSR6Prompt(p) {
+    if (p.kind === 'pythagorean') {
+      var labels = { leg1Label: p.a, leg2Label: p.b, hypLabel: p.c };
+      if (p.find === 'leg1') labels.leg1Label = '?';
+      else if (p.find === 'leg2') labels.leg2Label = '?';
+      else labels.hypLabel = '?';
+      return '<div class="qQuestion">Find the missing side of this right triangle.</div>' +
+        rightTriangleSVG(p.a, p.b, p.c, labels);
+    }
+    if (p.kind === 'ratio') {
+      var lbl = p.angleAt === 'leg1end' ? '\u03b8' : '\u03b8';
+      return '<div class="qQuestion">Find ' + p.fn + '(\u03b8) as a fraction in lowest terms.</div>' +
+        rightTriangleSVG(p.a, p.b, p.c, { angleAt: p.angleAt, angleLabel: '\u03b8' });
+    }
+    if (p.ask === 'side') {
+      var opts2 = { opp: '?', adj: '?', hyp: '?' };
+      opts2[p.given] = p.givenLen; opts2[p.find] = '?';
+      var thirdKey = ['opp', 'adj', 'hyp'].filter(function (k) { return k !== p.given && k !== p.find; })[0];
+      var legOpts = { leg1Label: opts2.adj, leg2Label: opts2.opp, hypLabel: opts2.hyp };
+      return '<div class="qQuestion">In this right triangle, the marked angle is ' + p.angleDeg + '\u00b0 and the ' + GSR6_SIDE_NAME[p.given] + ' is ' + p.givenLen + '. Find the ' + GSR6_SIDE_NAME[p.find] + '. Round to the nearest tenth.</div>' +
+        rightTriangleSVG(1, 1, 1, { angleAt: 'leg1end', angleLabel: p.angleDeg + '\u00b0', leg1Label: legOpts.leg1Label, leg2Label: legOpts.leg2Label, hypLabel: legOpts.hypLabel });
+    }
+    var names = { 'opp/adj': ['opposite leg', 'adjacent leg'], 'opp/hyp': ['opposite leg', 'hypotenuse'], 'adj/hyp': ['adjacent leg', 'hypotenuse'] };
+    var nm = names[p.pair];
+    return '<div class="qQuestion">A right triangle has ' + nm[0] + ' = ' + p.s1 + ' and ' + nm[1] + ' = ' + p.s2 + '. Find the marked acute angle \u03b8, rounded to the nearest degree.</div>' +
+      rightTriangleSVG(1, 1, 1, { angleAt: 'leg1end', angleLabel: '\u03b8', leg1Label: p.pair === 'adj/hyp' ? p.s1 : (p.pair === 'opp/adj' ? p.s2 : '?'), leg2Label: p.pair === 'opp/adj' ? p.s1 : (p.pair === 'opp/hyp' ? p.s1 : '?'), hypLabel: p.pair === 'opp/hyp' ? p.s2 : (p.pair === 'adj/hyp' ? p.s2 : '?') });
+  }
+  function GSR6AnswerHTML(p) {
+    var suffix = (p.kind === 'solve' && p.ask === 'angle') ? '\u00b0' : '';
+    return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' +
+      (suffix ? '<span class="ansLabel">' + suffix + '</span>' : '') + sharedKbdHTML();
+  }
+  function GSR6Check(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'pythagorean' || p.kind === 'ratio') {
+      var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer);
+    }
+    var v = parseFloat(String(ans.x).trim().replace(/\u2212/g, '-'));
+    if (isNaN(v)) return false;
+    var places = p.ask === 'side' ? 1 : 0;
+    /* Compare as fixed-precision strings, not raw float equality — two
+       values that both round to "7.1" can still be different doubles
+       (7.1 vs 7.099999999999999), and toFixed sidesteps that entirely. */
+    return roundTo(v, places).toFixed(places) === p.answer.toFixed(places);
+  }
+  function GSR6Hints(p) {
+    if (p.kind === 'pythagorean') return '<p>a\u00b2 + b\u00b2 = c\u00b2, where c is the hypotenuse (the side opposite the right angle).</p>';
+    if (p.kind === 'ratio') return '<p>SOH-CAH-TOA: sin = opposite/hypotenuse, cos = adjacent/hypotenuse, tan = opposite/adjacent.</p>';
+    if (p.ask === 'side') return '<p>Set up SOH-CAH-TOA with the known angle, then solve for the missing side using your calculator.</p>';
+    return '<p>Use the inverse trig function that matches the two sides you\u2019re given (sin\u207b\u00b9, cos\u207b\u00b9, or tan\u207b\u00b9).</p>';
+  }
+  function GSR6Steps(p) {
+    if (p.kind === 'pythagorean') {
+      return '<ol class="stepList"><li>a\u00b2 + b\u00b2 = c\u00b2 \u2192 ' + p.a + '\u00b2 + ' + p.b + '\u00b2 = ' + p.c + '\u00b2</li>' +
+        '<li>Solving for the missing side gives ' + p.answer.n + '.</li></ol>';
+    }
+    if (p.kind === 'ratio') {
+      var opp = p.angleAt === 'leg1end' ? p.b : p.a, adj = p.angleAt === 'leg1end' ? p.a : p.b;
+      var raw = p.fn === 'sin' ? (opp + '/' + p.c) : p.fn === 'cos' ? (adj + '/' + p.c) : (opp + '/' + adj);
+      return '<ol class="stepList"><li>' + p.fn + '(\u03b8) = ' + raw + ', simplified = ' + ratStr(p.answer) + '</li></ol>';
+    }
+    if (p.ask === 'side') {
+      var fnUsed = (p.given === 'hyp' && p.find === 'opp') || (p.given === 'opp' && p.find === 'hyp') ? 'sin' :
+        (p.given === 'hyp' && p.find === 'adj') || (p.given === 'adj' && p.find === 'hyp') ? 'cos' : 'tan';
+      return '<ol class="stepList"><li>Using ' + fnUsed + '(' + p.angleDeg + '\u00b0) with the known ' + GSR6_SIDE_NAME[p.given] + ' = ' + p.givenLen + ', solve for the ' + GSR6_SIDE_NAME[p.find] + '.</li>' +
+        '<li>' + GSR6_SIDE_NAME[p.find] + ' \u2248 ' + p.answer + '</li></ol>';
+    }
+    return '<ol class="stepList"><li>\u03b8 = ' + p.fn + '\u207b\u00b9(' + p.s1 + '/' + p.s2 + ') \u2248 ' + p.answer + '\u00b0</li></ol>';
+  }
+
+  /* =====================================================================
+     GSR.7 — Make connections between geometry and algebraic equations.
+     Synthesis module (per the registry's reuse note) — reuses GSR.6's
+     Pythagorean-triple machinery for distance and GSR.4's formula shapes
+     for the literal-equation kind, now viewed through coordinate/algebra.
+     ===================================================================== */
+
+  /* ---------------- distance & midpoint ---------------- */
+  function genGSR7_distance() {
+    var t = pickTriple();
+    var dx = t[0] * pick([1, -1]), dy = t[1] * pick([1, -1]);
+    var x1 = ri(-6, 6), y1 = ri(-6, 6);
+    var x2 = x1 + dx, y2 = y1 + dy;
+    var ask = pick(['distance', 'midpoint']);
+    if (ask === 'distance') {
+      return { kind: 'coord', ask: 'distance', x1: x1, y1: y1, x2: x2, y2: y2, answer: R(t[2], 1) };
+    }
+    var mx = R(x1 + x2, 2), my = R(y1 + y2, 2);
+    return { kind: 'coord', ask: 'midpoint', x1: x1, y1: y1, x2: x2, y2: y2, answer: { x: mx, y: my } };
+  }
+
+  /* ---------------- slope: compute from two points, or classify two given slopes ---------------- */
+  function genGSR7_slope() {
+    var sub = pick(['calc', 'classify']);
+    if (sub === 'calc') {
+      var x1 = ri(-6, 4), y1 = ri(-6, 4);
+      var dx = nonZero(-6, 6), dy = ri(-8, 8);
+      var x2 = x1 + dx, y2 = y1 + dy;
+      return { kind: 'coord', ask: 'slope', sub: 'calc', x1: x1, y1: y1, x2: x2, y2: y2, answer: R(dy, dx) };
+    }
+    var m1n = nonZero(-6, 6), m1d = ri(1, 5);
+    var relation = pick(['parallel', 'perpendicular', 'neither']);
+    var m2n, m2d;
+    if (relation === 'parallel') { m2n = m1n; m2d = m1d; }
+    else if (relation === 'perpendicular') { m2n = -m1d; m2d = m1n; }
+    else {
+      do { m2n = nonZero(-6, 6); m2d = ri(1, 5); } while (req(R(m2n, m2d), R(m1n, m1d)) || req(R(m2n, m2d), R(-m1d, m1n)));
+    }
+    var m1 = R(m1n, m1d), m2 = R(m2n, m2d);
+    return { kind: 'coord', ask: 'slope', sub: 'classify', m1: m1, m2: m2, answer: relation };
+  }
+  var GSR7_SLOPE_OPTIONS = [{ v: 'parallel', label: 'Parallel' }, { v: 'perpendicular', label: 'Perpendicular' }, { v: 'neither', label: 'Neither' }];
+
+  /* ---------------- literal geometry formulas: generate forward, ask backward ---------------- */
+  var GSR7_FORMULAS = [
+    { key: 'rectPerimeter', vars: ['l', 'w'], target: null, label: 'P = 2l + 2w', gen: function () { return { l: ri(3, 20), w: ri(3, 20) }; }, compute: function (v) { return 2 * v.l + 2 * v.w; }, resultName: 'P' },
+    { key: 'triArea', vars: ['b', 'h'], gen: function () { var b = ri(4, 20), h = ri(4, 20); if ((b * h) % 2 !== 0) h = h + 1; return { b: b, h: h }; }, compute: function (v) { return v.b * v.h / 2; }, resultName: 'A', label: 'A = \u00bdbh' },
+    { key: 'prismVolume', vars: ['l', 'w', 'h'], gen: function () { return { l: ri(2, 10), w: ri(2, 10), h: ri(2, 10) }; }, compute: function (v) { return v.l * v.w * v.h; }, resultName: 'V', label: 'V = lwh' },
+    { key: 'circleCircumference', vars: ['r'], gen: function () { return { r: ri(2, 15) }; }, compute: function (v) { return R(628 * v.r, 100); }, resultName: 'C', label: 'C = 2\u03c0r', exact: true }
+  ];
+  function genGSR7_formula() {
+    var f = pick(GSR7_FORMULAS);
+    var vals = f.gen();
+    var known = f.vars.slice();
+    var unknown = pick(known);
+    var resultR = f.exact ? f.compute(vals) : R(Math.round(f.compute(vals) * 1000), 1000);
+    return { kind: 'formula', formula: f, vals: vals, unknown: unknown, result: resultR, answer: R(vals[unknown], 1) };
+  }
+  function genGSR7(mode) {
+    var kind = mode === 'mixed' ? pick(['distance', 'slope', 'formula']) : mode;
+    if (kind === 'distance') return genGSR7_distance();
+    if (kind === 'slope') return genGSR7_slope();
+    return genGSR7_formula();
+  }
+  function GSR7Prompt(p) {
+    if (p.kind === 'coord' && p.ask === 'distance') {
+      var grid = coordGridSVG({ lo: -8, hi: 8 }, { points: [{ x: p.x1, y: p.y1, label: 'A(' + p.x1 + ',' + p.y1 + ')' }, { x: p.x2, y: p.y2, label: 'B(' + p.x2 + ',' + p.y2 + ')' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2 }] });
+      return '<div class="qQuestion">Find the distance between A(' + p.x1 + ', ' + p.y1 + ') and B(' + p.x2 + ', ' + p.y2 + ').</div>' + grid;
+    }
+    if (p.kind === 'coord' && p.ask === 'midpoint') {
+      var grid2 = coordGridSVG({ lo: -8, hi: 8 }, { points: [{ x: p.x1, y: p.y1, label: 'A(' + p.x1 + ',' + p.y1 + ')' }, { x: p.x2, y: p.y2, label: 'B(' + p.x2 + ',' + p.y2 + ')' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2, dashed: true }] });
+      return '<div class="qQuestion">Find the midpoint of segment AB, where A(' + p.x1 + ', ' + p.y1 + ') and B(' + p.x2 + ', ' + p.y2 + ').</div>' + grid2;
+    }
+    if (p.kind === 'coord' && p.sub === 'calc') {
+      var grid3 = coordGridSVG({ lo: -8, hi: 8 }, { points: [{ x: p.x1, y: p.y1, label: 'A' }, { x: p.x2, y: p.y2, label: 'B' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2 }] });
+      return '<div class="qQuestion">Find the slope of the line through A(' + p.x1 + ', ' + p.y1 + ') and B(' + p.x2 + ', ' + p.y2 + ').</div>' + grid3;
+    }
+    if (p.kind === 'coord' && p.sub === 'classify') {
+      return '<div class="qQuestion">Line 1 has slope ' + ratStr(p.m1) + '. Line 2 has slope ' + ratStr(p.m2) + '.</div>' +
+        '<div class="qQuestion" style="margin-top:10px">Are the two lines parallel, perpendicular, or neither?</div>';
+    }
+    var f = p.formula;
+    var lines = f.vars.map(function (v) { return v === p.unknown ? (v + ' = ?') : (v + ' = ' + p.vals[v]); }).join(', ');
+    return '<div class="qQuestion">Using the formula ' + f.label + ', with ' + f.resultName + ' = ' + ratHTMLorInt(p.result) + ' and ' + lines + ', solve for ' + p.unknown + '.</div>';
+  }
+  function GSR7AnswerHTML(p) {
+    if (p.kind === 'coord' && p.ask === 'midpoint') {
+      return '<div class="qPart"><span class="ansLabel">x =</span><input type="text" class="in" id="ans_px" inputmode="text" autocomplete="off" aria-label="midpoint x">' +
+        '<span class="ansLabel" style="margin-left:10px">y =</span><input type="text" class="in" id="ans_py" inputmode="text" autocomplete="off" aria-label="midpoint y"></div>' + sharedKbdHTML();
+    }
+    if (p.kind === 'coord' && p.sub === 'classify') return choiceNHTML('gsr7Choice', GSR7_SLOPE_OPTIONS);
+    return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML();
+  }
+  function GSR7Check(p, ans) {
+    if (!ans) return false;
+    if (p.kind === 'coord' && p.ask === 'midpoint') {
+      var rx = parseRat(ans.px), ry = parseRat(ans.py);
+      if (!rx || !ry) return false;
+      return req(rx, p.answer.x) && req(ry, p.answer.y);
+    }
+    if (p.kind === 'coord' && p.sub === 'classify') return ans.c === p.answer;
+    var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer);
+  }
+  function GSR7Hints(p) {
+    if (p.kind === 'coord' && p.ask === 'distance') return '<p>Distance = \u221a((x\u2082 \u2212 x\u2081)\u00b2 + (y\u2082 \u2212 y\u2081)\u00b2) \u2014 this is the Pythagorean theorem applied to the horizontal and vertical legs between the two points.</p>';
+    if (p.kind === 'coord' && p.ask === 'midpoint') return '<p>Midpoint = ((x\u2081 + x\u2082)/2, (y\u2081 + y\u2082)/2) \u2014 average the x-coordinates, then average the y-coordinates.</p>';
+    if (p.kind === 'coord' && p.sub === 'calc') return '<p>Slope = (y\u2082 \u2212 y\u2081) / (x\u2082 \u2212 x\u2081) \u2014 rise over run.</p>';
+    if (p.kind === 'coord' && p.sub === 'classify') return '<p>Parallel lines have equal slopes. Perpendicular lines have slopes that are negative reciprocals of each other (multiply to \u22121).</p>';
+    return '<p>Substitute the known values into the formula, then solve the resulting equation for the missing variable.</p>';
+  }
+  function GSR7Steps(p) {
+    if (p.kind === 'coord' && p.ask === 'distance') {
+      var dx = p.x2 - p.x1, dy = p.y2 - p.y1;
+      return '<ol class="stepList"><li>\u0394x = ' + p.x2 + ' \u2212 ' + p.x1 + ' = ' + dx + ', \u0394y = ' + p.y2 + ' \u2212 ' + p.y1 + ' = ' + dy + '</li>' +
+        '<li>Distance = \u221a(' + dx + '\u00b2 + ' + dy + '\u00b2) = \u221a' + (dx * dx + dy * dy) + ' = ' + p.answer.n + '</li></ol>';
+    }
+    if (p.kind === 'coord' && p.ask === 'midpoint') {
+      return '<ol class="stepList"><li>x: (' + p.x1 + ' + ' + p.x2 + ')/2 = ' + ratHTMLorInt(p.answer.x) + '</li>' +
+        '<li>y: (' + p.y1 + ' + ' + p.y2 + ')/2 = ' + ratHTMLorInt(p.answer.y) + '</li></ol>';
+    }
+    if (p.kind === 'coord' && p.sub === 'calc') {
+      var dx2 = p.x2 - p.x1, dy2 = p.y2 - p.y1;
+      return '<ol class="stepList"><li>slope = (' + p.y2 + ' \u2212 ' + p.y1 + ') / (' + p.x2 + ' \u2212 ' + p.x1 + ') = ' + dy2 + '/' + dx2 + ' = ' + ratHTMLorInt(p.answer) + '</li></ol>';
+    }
+    if (p.kind === 'coord' && p.sub === 'classify') {
+      var product = R(p.m1.n * p.m2.n, p.m1.d * p.m2.d);
+      var line = p.answer === 'parallel' ? 'The slopes are equal.' : p.answer === 'perpendicular' ? 'The product of the slopes is ' + ratStr(product) + ' = \u22121.' : 'The slopes are neither equal nor multiply to \u22121.';
+      return '<ol class="stepList"><li>' + line + '</li><li>The lines are <b>' + p.answer + '</b>.</li></ol>';
+    }
+    var f = p.formula;
+    return '<ol class="stepList"><li>' + f.label + '</li><li>' + f.resultName + ' = ' + ratHTMLorInt(p.result) + '</li><li>Solving for ' + p.unknown + ' gives ' + p.answer.n + '.</li></ol>';
+  }
+
+  /* =====================================================================
+     Per-standard TYPE state + DOM read() functions.
+     ===================================================================== */
+  var GSR1_curType = 'mixed', GSR2_curType = 'mixed', GSR3_curType = 'mixed',
+      GSR4_curType = 'mixed', GSR5_curType = 'mixed', GSR6_curType = 'mixed', GSR7_curType = 'mixed';
+  var GSR1_selChoice = null, GSR2_selChoice = null, GSR5_selChoice = null, GSR7_selChoice = null;
+
+  function readPlainInput() {
+    var el = document.getElementById('ans_x');
+    var v = el ? el.value.trim() : '';
+    if (v === '') return null;
+    return { x: v };
+  }
+  function readTwoInputs() {
+    var ex = document.getElementById('ans_px'), ey = document.getElementById('ans_py');
+    var vx = ex ? ex.value.trim() : '', vy = ey ? ey.value.trim() : '';
+    if (vx === '' || vy === '') return null;
+    return { px: vx, py: vy };
+  }
+  function GSR1Read(p) { return GSR1_selChoice ? { c: GSR1_selChoice } : null; }
+  function GSR2Read(p) {
+    if (p.kind === 'classify' || p.ask === 'name') return GSR2_selChoice ? { c: GSR2_selChoice } : null;
+    return readPlainInput();
+  }
+  function GSR3Read(p) { return readPlainInput(); }
+  function GSR4Read(p) { return readPlainInput(); }
+  function GSR5Read(p) {
+    if (p.kind === 'identify' || p.kind === 'congruentSimilar') return GSR5_selChoice ? { c: GSR5_selChoice } : null;
+    if (p.kind === 'apply') return readTwoInputs();
+    return readPlainInput();
+  }
+  function GSR6Read(p) { return readPlainInput(); }
+  function GSR7Read(p) {
+    if (p.kind === 'coord' && p.ask === 'midpoint') return readTwoInputs();
+    if (p.kind === 'coord' && p.sub === 'classify') return GSR7_selChoice ? { c: GSR7_selChoice } : null;
+    return readPlainInput();
+  }
+
+  /* =====================================================================
+     STUBS registry — one entry per standard, full Part 1 SE contract.
+     ===================================================================== */
+  var STUBS = {
+    'GSR.1': {
+      gen: function () { GSR1_selChoice = null; return genGSR1(GSR1_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('gsr1TypeSel', GSR1_curType, [['mixed', 'Mixed'], ['category', 'Category'], ['appropriate', 'Best Estimate']]); },
+      prompt: function (p) { return GSR1Prompt(p); },
+      answerHTML: function (p) { return GSR1AnswerHTML(p); },
+      read: function (p) { return GSR1Read(p); },
+      check: function (p, ans) { return GSR1Check(p, ans); },
+      hints: function (p) { return GSR1Hints(p); },
+      steps: function (p) { return GSR1Steps(p); },
+      init: function () {
+        wireSeg('gsr1TypeSel', GSR1_curType, function (v) { GSR1_curType = v; renderCard(); });
+        wireChoiceN('gsr1Choice', function (c) { GSR1_selChoice = c; });
+      },
+      reveal: function (p) { revealChoiceN('gsr1Choice', p.answer); },
+      emptyMsg: 'Choose an answer before checking.'
+    },
+    'GSR.2': {
+      gen: function () { GSR2_selChoice = null; return genGSR2(GSR2_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('gsr2TypeSel', GSR2_curType, [['mixed', 'Mixed'], ['classify', 'Classify an Angle'], ['pairs', 'Angle Pairs']]); },
+      prompt: function (p) { return GSR2Prompt(p); },
+      answerHTML: function (p) { return GSR2AnswerHTML(p); },
+      read: function (p) { return GSR2Read(p); },
+      check: function (p, ans) { return GSR2Check(p, ans); },
+      hints: function (p) { return GSR2Hints(p); },
+      steps: function (p) { return GSR2Steps(p); },
+      init: function (p) {
+        wireSeg('gsr2TypeSel', GSR2_curType, function (v) { GSR2_curType = v; renderCard(); });
+        var isChoice = (p.kind === 'classify' || p.ask === 'name');
+        if (isChoice) wireChoiceN('gsr2Choice', function (c) { GSR2_selChoice = c; });
+        else wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) {
+        var isChoice = (p.kind === 'classify' || p.ask === 'name');
+        if (isChoice) revealChoiceN('gsr2Choice', p.answer);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Choose or enter an answer before checking.'
+    },
+    'GSR.3': {
+      gen: function () { return genGSR3(GSR3_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('gsr3TypeSel', GSR3_curType, [['mixed', 'Mixed'], ['length', 'Length'], ['weight', 'Weight/Mass'], ['capacity', 'Capacity/Volume'], ['time', 'Time']]); },
+      prompt: function (p) { return GSR3Prompt(p); },
+      answerHTML: function (p) { return GSR3AnswerHTML(p); },
+      read: function (p) { return GSR3Read(p); },
+      check: function (p, ans) { return GSR3Check(p, ans); },
+      hints: function (p) { return GSR3Hints(p); },
+      steps: function (p) { return GSR3Steps(p); },
+      init: function () { wireSeg('gsr3TypeSel', GSR3_curType, function (v) { GSR3_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'GSR.4': {
+      gen: function () { return genGSR4(GSR4_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('gsr4TypeSel', GSR4_curType, [['mixed', 'Mixed'], ['perimeter', 'Perimeter'], ['area', 'Area'], ['surfaceArea', 'Surface Area'], ['volume', 'Volume'], ['estimate', 'Estimate']]); },
+      prompt: function (p) { return GSR4Prompt(p); },
+      answerHTML: function (p) { return GSR4AnswerHTML(p); },
+      read: function (p) { return GSR4Read(p); },
+      check: function (p, ans) { return GSR4Check(p, ans); },
+      hints: function (p) { return GSR4Hints(p); },
+      steps: function (p) { return GSR4Steps(p); },
+      init: function () { wireSeg('gsr4TypeSel', GSR4_curType, function (v) { GSR4_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'GSR.5': {
+      gen: function () { GSR5_selChoice = null; return genGSR5(GSR5_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('gsr5TypeSel', GSR5_curType, [['mixed', 'Mixed'], ['identify', 'Identify'], ['apply', 'Apply'], ['congruentSimilar', 'Congruent or Similar'], ['symmetry', 'Symmetry']]); },
+      prompt: function (p) { return GSR5Prompt(p); },
+      answerHTML: function (p) { return GSR5AnswerHTML(p); },
+      read: function (p) { return GSR5Read(p); },
+      check: function (p, ans) { return GSR5Check(p, ans); },
+      hints: function (p) { return GSR5Hints(p); },
+      steps: function (p) { return GSR5Steps(p); },
+      init: function (p) {
+        wireSeg('gsr5TypeSel', GSR5_curType, function (v) { GSR5_curType = v; renderCard(); });
+        var isChoice = (p.kind === 'identify' || p.kind === 'congruentSimilar');
+        if (isChoice) wireChoiceN('gsr5Choice', function (c) { GSR5_selChoice = c; });
+        else wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) {
+        var isChoice = (p.kind === 'identify' || p.kind === 'congruentSimilar');
+        if (isChoice) revealChoiceN('gsr5Choice', p.answer);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Choose or enter an answer before checking.'
+    },
+    'GSR.6': {
+      gen: function () { return genGSR6(GSR6_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('gsr6TypeSel', GSR6_curType, [['mixed', 'Mixed'], ['pythagorean', 'Pythagorean Theorem'], ['ratio', 'Trig Ratios'], ['solve', 'Find a Side or Angle']]); },
+      prompt: function (p) { return GSR6Prompt(p); },
+      answerHTML: function (p) { return GSR6AnswerHTML(p); },
+      read: function (p) { return GSR6Read(p); },
+      check: function (p, ans) { return GSR6Check(p, ans); },
+      hints: function (p) { return GSR6Hints(p); },
+      steps: function (p) { return GSR6Steps(p); },
+      init: function () { wireSeg('gsr6TypeSel', GSR6_curType, function (v) { GSR6_curType = v; renderCard(); }); wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop'); },
+      reveal: function (p, correct) { genericReveal(correct); },
+      emptyMsg: 'Enter your answer before checking.'
+    },
+    'GSR.7': {
+      gen: function () { GSR7_selChoice = null; return genGSR7(GSR7_curType); },
+      controlsHTML: function () { return stdTypeSelHTML('gsr7TypeSel', GSR7_curType, [['mixed', 'Mixed'], ['distance', 'Distance & Midpoint'], ['slope', 'Slope & Lines'], ['formula', 'Geometry Formulas']]); },
+      prompt: function (p) { return GSR7Prompt(p); },
+      answerHTML: function (p) { return GSR7AnswerHTML(p); },
+      read: function (p) { return GSR7Read(p); },
+      check: function (p, ans) { return GSR7Check(p, ans); },
+      hints: function (p) { return GSR7Hints(p); },
+      steps: function (p) { return GSR7Steps(p); },
+      init: function (p) {
+        wireSeg('gsr7TypeSel', GSR7_curType, function (v) { GSR7_curType = v; renderCard(); });
+        if (p.kind === 'coord' && p.sub === 'classify') wireChoiceN('gsr7Choice', function (c) { GSR7_selChoice = c; });
+        else wireSharedKbd(document.getElementById('answerArea'), 'sharedKbdBtn', 'sharedKbdPop');
+      },
+      reveal: function (p, correct) {
+        if (p.kind === 'coord' && p.sub === 'classify') revealChoiceN('gsr7Choice', p.answer);
+        else genericReveal(correct);
+      },
+      emptyMsg: 'Choose or enter an answer before checking.'
+    }
+  };
 
   var STANDARDS = TSIPortal.REGISTRY.filter(function(r){ return r.sec === SECTION_ID; });
 
@@ -59,6 +1665,14 @@
     });
   }
 
+  /* ---------------------------------------------------------------------
+     renderCard — the standing controller (Part 0.3), ported byte-for-byte
+     from apps/tsi-psr.html (itself unchanged from apps/tsi-ar.html). Zero
+     controller changes needed for seven standards whose answer-control
+     shapes range from a single fraction box to a two-input coordinate
+     pair to a 5-way choiceN — the exact payoff every prior section's log
+     predicted for the next subject.
+     --------------------------------------------------------------------- */
   function renderCard(){
     var r = STANDARDS[cur];
     $('#curCode').textContent = r.code;
@@ -80,24 +1694,82 @@
     }
 
     var p = stub.gen();
+    var controls = stub.controlsHTML ? stub.controlsHTML(p) : '';
+    var hasSteps = !!stub.steps;
     $('#card').innerHTML =
       '<span class="seCode">'+r.code+'</span>' +
       '<div class="seName">'+r.name+'</div>' +
+      controls +
       '<div class="promptArea" id="promptArea">'+stub.prompt(p)+'</div>' +
-      '<div class="actionRow">' +
+      '<div class="answerArea" id="answerArea">'+stub.answerHTML(p)+'</div>' +
+      '<div class="fbMsg" id="fbMsg" aria-live="polite"></div>' +
+      '<div class="actionRow" id="actionRow">' +
         '<button class="btn primary" id="checkBtn">Check</button>' +
-        '<button class="btn" id="hintBtn">Hint</button>' +
+        (stub.hints ? '<button class="btn" id="hintBtn">Hint</button>' : '') +
+        (hasSteps ? '<button class="btn" id="stepsBtn" title="Shows the full solution \u2014 a correct answer after this won\u2019t count toward mastery">Show steps</button>' : '') +
       '</div>' +
+      (hasSteps ? '<div class="stepsNote">Hint gives you a nudge without the answer. Show steps walks through the full solution \u2014 use it if you\u2019re stuck, but a correct answer afterward won\u2019t count toward mastery.</div>' : '') +
       '<div class="hintPanel" id="hintPanel"></div>';
 
-    $('#checkBtn').addEventListener('click', function(){
-      var ans = $('#promptArea').querySelector('input') ? $('#promptArea').querySelector('input').value : '';
-      var correct = stub.check(p, ans);
-      TSIPortal.record(r.id, correct, { level: 1 });
-      renderCard();
-    });
-    $('#hintBtn').addEventListener('click', function(){
+    if (stub.init) stub.init(p);
+
+    var hintLogged = false;
+    var stepsRevealed = false;
+
+    function logHintUse(){
+      if (hintLogged) return;
+      hintLogged = true;
       TSIPortal.hint(r.id);
+    }
+
+    $('#checkBtn').addEventListener('click', function(){
+      var ans = stub.read ? stub.read(p) : null;
+      var fb = $('#fbMsg');
+      if (ans === null){
+        fb.textContent = stub.emptyMsg || 'Please enter an answer.';
+        fb.className = 'fbMsg warn';
+        return;
+      }
+      closeKeyboards();
+      var trueCorrect = stub.check(p, ans);
+      var countedCorrect = trueCorrect && !stepsRevealed;
+      TSIPortal.record(r.id, countedCorrect, { level: 1 });
+      if (trueCorrect && stepsRevealed){
+        fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
+        fb.className = 'fbMsg warn';
+      } else if (trueCorrect){
+        fb.textContent = 'Correct! \u2713';
+        fb.className = 'fbMsg ok';
+      } else {
+        fb.textContent = 'Not quite \u2014 see the steps below.';
+        fb.className = 'fbMsg err';
+      }
+      document.querySelectorAll('#answerArea input, #answerArea button').forEach(function(el){ el.disabled = true; });
+      $('#checkBtn').disabled = true;
+      if (stub.reveal) stub.reveal(p, trueCorrect);
+      var nextBtn = document.createElement('button');
+      nextBtn.type = 'button'; nextBtn.className = 'btn primary'; nextBtn.id = 'nextBtn';
+      nextBtn.textContent = 'Next problem \u2192';
+      nextBtn.addEventListener('click', renderCard);
+      $('#actionRow').appendChild(nextBtn);
+      if (!trueCorrect && hasSteps){
+        stepsRevealed = true;
+        var panel = $('#hintPanel');
+        panel.innerHTML = stub.steps(p);
+        panel.classList.add('show');
+      }
+    });
+    var hintBtnEl = $('#hintBtn');
+    if (hintBtnEl) hintBtnEl.addEventListener('click', function(){
+      logHintUse();
+      var panel = $('#hintPanel');
+      panel.innerHTML = stub.hints(p);
+      panel.classList.add('show');
+    });
+    var stepsBtnEl = $('#stepsBtn');
+    if (stepsBtnEl) stepsBtnEl.addEventListener('click', function(){
+      logHintUse();
+      stepsRevealed = true;
       var panel = $('#hintPanel');
       panel.innerHTML = stub.steps(p);
       panel.classList.add('show');
