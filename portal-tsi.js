@@ -523,6 +523,17 @@
     totals: totals,
     nextOnPath: nextOnPath,
 
+    /* Lower-level rollup math, exposed so anything holding a data blob that
+       ISN'T this device's own (e.g. a teacher report reading many students'
+       synced records) can reuse the exact same mastery/aggregation logic
+       instead of re-implementing it. `d` is a full {v,student,skills,sessions}
+       object; `reg` is one TSIPortal.REGISTRY entry (or {id:'AR.1'} for a bare
+       module id with no roll-up). Mirrors portal.js's exposure of the same
+       three functions, for the combined teacher-portal page. */
+    computeStats: computeStats,
+    aggregateModules: aggregateModules,
+    statsForD: statsForD,
+
     mode: mode,
     validId: validId,
     studentId: studentId,
