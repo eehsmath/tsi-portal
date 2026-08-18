@@ -63,6 +63,7 @@ body{
 }
 .btn.primary{border:0; background:linear-gradient(90deg,var(--rust),var(--wine)); color:#fff7ee}
 .btn.info{border:0; background:linear-gradient(90deg,#f3ddb9,#e6b880); color:#3a2205}
+.btn.slate{border:0; background:linear-gradient(90deg,#8194ad,#5b7390); color:#f6f9fc}
 .btn:active{transform:translateY(1px)}
 .btn[disabled]{opacity:.55; cursor:default}
 .btn:focus-visible, input:focus-visible{outline:3px solid #f0a83c; outline-offset:2px}
