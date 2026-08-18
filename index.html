@@ -25,8 +25,8 @@
       <span class="pill">Standards polished <b id="tMastered">0</b></span>
       <span style="flex:1"></span>
       <button class="btn primary" id="continueBtn">Continue my path →</button>
+      <button class="btn info" id="crcBtn">Practice test</button>
       <button class="btn info" id="reportBtn">My report</button>
-      <button class="btn" id="moreBtn">More practice</button>
     </div>
   </div>
 
@@ -83,6 +83,7 @@
       <div class="viewSwitch noprint" role="tablist" aria-label="Report view">
         <button class="viewBtn is-active" data-view="summary" role="tab">Summary</button>
         <button class="viewBtn" data-view="detail" role="tab">Detail</button>
+        <button class="viewBtn" data-view="tests" role="tab">Practice tests</button>
       </div>
       <div class="viewCaption" id="viewCaption"></div>
       <table>
@@ -102,22 +103,6 @@
   </div>
 </div>
 
-<!-- ============ more practice modal ============ -->
-<div class="modal" id="moreModal" role="dialog" aria-modal="true" aria-label="More practice apps">
-  <div class="modalCard moreCard">
-    <div class="modalHead">
-      <h3>More Practice</h3>
-      <div class="noprint"><button class="btn" id="closeMore">Close</button></div>
-    </div>
-    <div class="modalBody">
-      <p class="lead" style="margin:0 0 14px; color:var(--muted); font-weight:700; font-size:14px">
-        Extra practice apps that don't connect to your saved progress — just for additional practice.
-      </p>
-      <ul class="moreList" id="moreList"></ul>
-    </div>
-  </div>
-</div>
-
 <script src="portal-tsi.js"></script>
 <script>
 (function(){
@@ -126,16 +111,18 @@
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 
-  /* ---------- LEGACY APPS ----------
-     Nothing here yet — the legacy proportions/percent app mentioned for
-     QR.1/QR.5/QR.6 goes here once shared. Same shape as the Algebra 1
-     portal's LEGACY_APPS: { name, desc, file, group: 'skill'|'drill' }. */
-  var LEGACY_APPS = [];
-
   /* Plain-text form of the same citation shown (as a link) in the report
      modal — kept as one constant so the wording can't drift between the
      two places it appears. */
   var STANDARDS_SOURCE = 'THECB/College Board TSIA2 Mathematics Test Specifications v1.4, Table 1';
+
+  /* Skill ids written by apps/tsi-crc.html. Not in REGISTRY on purpose. */
+  var CRC_STRANDS = [
+    { key: 'AR',  abbr: 'AR',  id: 'CRC.AR',  label: 'Algebraic Reasoning' },
+    { key: 'QR',  abbr: 'QR',  id: 'CRC.QR',  label: 'Quantitative Reasoning' },
+    { key: 'PSR', abbr: 'PSR', id: 'CRC.PSR', label: 'Probabilistic and Statistical Reasoning' },
+    { key: 'GSR', abbr: 'GSR', id: 'CRC.GSR', label: 'Geometric and Spatial Reasoning' }
+  ];
 
   /* ---------- build the four section cards ---------- */
   function ringSVG(pct, accent){
@@ -277,6 +264,14 @@
     if(next){ location.href = next.file; }
   });
 
+  /* ---------- adaptive CRC practice test ----------
+     Deliberately NOT a REGISTRY entry. It is a 20-item mixed-strand
+     simulation, not a standard to be polished, and its results are stored
+     under the CRC.* skill ids so they can never move a standard's mastery
+     numbers. See the header comment in apps/tsi-crc.html §8. */
+  var CRC_FILE = 'apps/tsi-crc.html';
+  $('#crcBtn').addEventListener('click', function(){ location.href = CRC_FILE; });
+
   /* ---------- report ---------- */
   function statusChip(st){
     if (!st.attempts) return '<span class="chip-none">Not started</span>';
@@ -293,7 +288,8 @@
 
   var VIEW_CAPTIONS = {
     summary: 'Per-standard roll-up. One row per TSI standard the student has practiced.',
-    detail:  'Full breakdown by standard: hints used, level, and attempts to mastery.'
+    detail:  'Full breakdown by standard: hints used, level, and attempts to mastery.',
+    tests:   'Every adaptive practice test taken, newest first, with the per-strand split for each one.'
   };
 
   function headHTML(view){
@@ -349,28 +345,101 @@
       '<td>'+statusChip(st)+'</td></tr>';
   }
 
-  function colspan(view){ return view === 'detail' ? 10 : 7; }
+  function colspan(view){
+    if (view === 'detail') return 10;
+    if (view === 'tests')  return 8;
+    return 7;
+  }
+
+  /* ================= practice-test view =================
+     Reads TSIPortal.testLog() / .testSummary(), which are fed by
+     apps/tsi-crc.html. These are NOT skills and never touch mastery —
+     see the PRACTICE-TEST LOG comment in portal-tsi.js. */
+  function testsHeadHTML(){
+    return '<tr><th>Date</th><th>Est. score</th><th>Result</th><th>Raw</th>' +
+      CRC_STRANDS.map(function(c){ return '<th>'+c.abbr+'</th>'; }).join('') +
+      '<th>Test code</th></tr>';
+  }
+
+  function strandCell(pair){
+    if (!pair || !pair[1]) return '<td class="num muted">—</td>';
+    var acc = pair[0]/pair[1];
+    var tone = acc >= 0.8 ? 'var(--ok)' : acc >= 0.5 ? 'var(--ink)' : 'var(--err)';
+    return '<td class="num" style="color:'+tone+'">'+pair[0]+'/'+pair[1]+'</td>';
+  }
+
+  function renderTests(){
+    var log = TSIPortal.testLog().slice().reverse();   // newest first
+    var sum = TSIPortal.testSummary();
+
+    if (!log.length){
+      $('#repHead').innerHTML = '';
+      $('#repRows').innerHTML = '<tr><td colspan="'+colspan('tests')+'" style="color:var(--muted)">'+
+        'No practice tests taken yet — use the <b>Practice test</b> button to take one.</td></tr>';
+      return;
+    }
+
+    $('#repHead').innerHTML = testsHeadHTML();
+
+    var head = '<tr class="std-row"><td colspan="'+colspan('tests')+'">' +
+      '<b>'+sum.count+'</b> test'+(sum.count===1?'':'s')+' taken · ' +
+      'best <b>'+sum.best+'</b> · latest <b>'+sum.latest+'</b> · ' +
+      '<b>'+sum.passed+'</b> at or above 950';
+    if (sum.count > 1){
+      head += ' · change since first test <b>'+(sum.gain>0?'+':'')+sum.gain+'</b>';
+    }
+    if (sum.weakest){
+      var wname = (CRC_STRANDS.filter(function(c){ return c.key === sum.weakest.key; })[0] || {}).label
+                  || sum.weakest.key;
+      head += '<br><span style="color:var(--muted)">Weakest area across all tests: <b>' +
+        esc(wname) + '</b> at ' + Math.round(sum.weakest.acc*100) + '% — ' +
+        'practice that section, then retest.</span>';
+    }
+    head += '</td></tr>';
+
+    var rows = log.map(function(e){
+      var s = e.s || {};
+      return '<tr>' +
+        '<td class="muted">'+fmtDate(e.t)+'</td>' +
+        '<td class="num"><b>'+e.score+'</b></td>' +
+        '<td>'+(e.ready ? '<span class="chip-ok">College ready ✓</span>'
+                        : '<span class="chip-prog">Not yet</span>')+'</td>' +
+        '<td class="num">'+e.right+'/'+e.n+'</td>' +
+        CRC_STRANDS.map(function(c){ return strandCell(s[c.key]); }).join('') +
+        '<td class="muted" style="font-size:12px">'+esc(e.code||'—')+
+          (e.mode === 'practice' ? ' <span class="muted">(practice mode)</span>' : '')+'</td>' +
+      '</tr>';
+    }).join('');
+
+    $('#repRows').innerHTML = head + rows;
+  }
 
   function renderReport(view){
     $('#reportModal').setAttribute('data-view', view);
     $('#viewCaption').textContent = VIEW_CAPTIONS[view] || '';
-    $('#repHead').innerHTML = headHTML(view);
     var btns = document.querySelectorAll('.viewBtn');
     for (var i = 0; i < btns.length; i++){
       btns[i].classList.toggle('is-active', btns[i].getAttribute('data-view') === view);
     }
+    if (view === 'tests'){ renderTests(); return; }
+    $('#repHead').innerHTML = headHTML(view);
     var rows = '';
     TSIPortal.REGISTRY.forEach(function(r){
       var st = TSIPortal.skill(r.id);
       if (!st.attempts) return;
       var label = (r.code ? '<b>'+r.code+'</b> ' : '') + r.name;
       rows += rowHTML(view, 'std', label, st, r.onCRC);
-      if (r.modules && r.modules.length){
+      /* Skip the sub-row when a standard's only module IS the standard —
+         which is currently true for every entry in the TSI registry, so
+         without this guard every row rendered twice. Real sub-modules
+         (e.g. modules:['AR.1a','AR.1b']) still list normally. */
+      if (r.modules && !(r.modules.length === 1 && r.modules[0] === r.id)){
         r.modules.forEach(function(mid){
           rows += rowHTML(view, 'se', mid, TSIPortal.skill(mid));
         });
       }
     });
+
     if (!rows){
       rows = '<tr><td colspan="'+colspan(view)+'" style="color:var(--muted)">'+
         'No practice recorded yet — go answer some questions!</td></tr>';
@@ -406,7 +475,7 @@
         (st.attemptsToMastery != null ? st.attemptsToMastery : ''),
         fmtDate(st.last), statusText(st)
       ].map(csvEscape).join(','));
-      if (r.modules && r.modules.length){
+      if (r.modules && !(r.modules.length === 1 && r.modules[0] === r.id)){
         r.modules.forEach(function(mid){
           var mst = TSIPortal.skill(mid);
           lines.push([
@@ -421,6 +490,22 @@
           ].map(csvEscape).join(','));
         });
       }
+    });
+    /* One row per completed practice test, tagged 'practice_test' so a teacher
+       can filter them apart from standards practice in the spreadsheet.
+       current_level carries the estimated CRC score. */
+    TSIPortal.testLog().forEach(function(e){
+      var s = e.s || {};
+      var per = CRC_STRANDS.map(function(c){
+        return c.abbr + ' ' + ((s[c.key] && s[c.key][1]) ? s[c.key][0]+'/'+s[c.key][1] : '-');
+      }).join('; ');
+      lines.push([
+        idText, nameText, 'practice_test', 'crc_attempt', e.code || '', per,
+        'apps/tsi-crc.html', 'Yes',
+        e.n, e.right, (e.right/e.n).toFixed(4), '',
+        '', e.score, '', fmtDate(e.t),
+        e.ready ? 'College ready' : 'Not yet'
+      ].map(csvEscape).join(','));
     });
     return lines.join('\n');
   }
@@ -456,41 +541,6 @@
   $('#printBtn').addEventListener('click', function(){ window.print(); });
   $('#csvBtn').addEventListener('click', downloadStudentCSV);
 
-  /* ---------- more practice ---------- */
-  var GROUP_LABELS = { skill: 'Skills', drill: 'Drills' };
-  var GROUP_ORDER = ['skill', 'drill'];
-
-  function itemHTML(app, i){
-    return '<li><a class="moreItem" href="'+esc(app.file)+'" target="_blank" rel="noopener">'+
-      '<span class="glyph">'+(i+1)+'</span>'+
-      '<span class="info"><span class="nm">'+esc(app.name)+'</span>'+
-        '<span class="ds">'+esc(app.desc||'')+'</span></span>'+
-      '<span class="go">Open →</span>'+
-    '</a></li>';
-  }
-  function renderMore(){
-    var host = $('#moreList');
-    if (!LEGACY_APPS.length){
-      host.innerHTML = '<li style="color:var(--muted); font-weight:700; font-size:13.5px">'+
-        'No apps listed yet — add entries to LEGACY_APPS in index.html.</li>';
-      return;
-    }
-    var html = '';
-    var counter = 0;
-    GROUP_ORDER.forEach(function(key){
-      var apps = LEGACY_APPS.filter(function(a){ return a.group === key; });
-      if (!apps.length) return;
-      html += '<li class="moreSectionHead">'+esc(GROUP_LABELS[key] || key)+'</li>';
-      html += apps.map(function(app){ counter++; return itemHTML(app, counter - 1); }).join('');
-    });
-    host.innerHTML = html;
-  }
-  $('#moreBtn').addEventListener('click', function(){
-    renderMore();
-    $('#moreModal').classList.add('show');
-  });
-  $('#closeMore').addEventListener('click', function(){ $('#moreModal').classList.remove('show'); });
-  $('#moreModal').addEventListener('click', function(e){ if(e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
   $('#copyCode').addEventListener('click', function(){
     var ta = $('#repCode'); ta.select();
     try{ navigator.clipboard.writeText(ta.value); }catch(e){ document.execCommand('copy'); }
