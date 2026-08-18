@@ -1,0 +1,1712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TSIA2 Math &mdash; Adaptive CRC Practice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   Direction: the artifacts of the subject itself — engineering
+   graph paper, ballpoint blue, and a teacher's red pen. Red is
+   reserved for exactly two things: the 950 cut line and a wrong
+   answer. Nothing else may use it.
+   ============================================================ */
+:root{
+  --paper:      #F6F9FC;
+  --paper-2:    #FFFFFF;
+  --grid:       #E1EBF3;
+  --grid-major: #CFDEEB;
+  --ink:        #14263A;
+  --ink-soft:   #5C7488;
+  --ink-faint:  #92A6B6;
+  --rule:       #C9D8E4;
+  --pen:        #D42248;   /* teacher's red — cut line + incorrect ONLY */
+  --check:      #0C7F58;   /* green ink — correct */
+  --blue:       #2C58A6;   /* ballpoint — primary action */
+  --blue-soft:  #E7EEF9;
+  --amber:      #C97B04;   /* in progress */
+
+  --qr: #2C58A6;
+  --ar: #6B3FA0;
+  --gsr: #0C7F58;
+  --psr: #B5581F;
+
+  --f-display: 'Archivo', system-ui, -apple-system, sans-serif;
+  --f-body:    'Public Sans', system-ui, -apple-system, sans-serif;
+  --f-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --r: 3px;
+  --shadow: 0 1px 0 var(--grid-major), 0 6px 18px -12px rgba(20,38,58,.4);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--f-body);
+  color:var(--ink);
+  background-color:var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size:22px 22px;
+  line-height:1.5;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:820px;margin:0 auto;padding:20px 16px 80px}
+
+h1,h2,h3{font-family:var(--f-display);margin:0;letter-spacing:-.015em}
+h1{font-size:clamp(26px,5.2vw,38px);font-weight:700;line-height:1.08}
+h2{font-size:clamp(19px,3.4vw,24px);font-weight:700}
+h3{font-size:15px;font-weight:600}
+
+.eyebrow{
+  font-family:var(--f-display);font-size:11px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-soft)}
+.small{font-size:13.5px}
+.tiny{font-size:12px}
+
+.card{
+  background:var(--paper-2);border:1px solid var(--rule);border-radius:var(--r);
+  padding:20px;box-shadow:var(--shadow);
+}
+.card + .card{margin-top:14px}
+
+hr.rule{border:0;border-top:1px solid var(--rule);margin:20px 0}
+
+/* ---------- buttons ---------- */
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font-family:var(--f-display);font-weight:600;font-size:15px;
+  padding:12px 22px;border-radius:var(--r);border:1px solid var(--blue);
+  background:var(--blue);color:#fff;transition:background .12s,transform .06s;
+}
+.btn:hover{background:#24488a}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{background:var(--ink-faint);border-color:var(--ink-faint);cursor:not-allowed;transform:none}
+.btn-ghost{background:transparent;color:var(--blue);border-color:var(--rule)}
+.btn-ghost:hover{background:var(--blue-soft)}
+.btn-sm{padding:8px 14px;font-size:13px}
+:focus-visible{outline:2.5px solid var(--amber);outline-offset:2px}
+
+/* ---------- strand chips ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;
+  border:1px solid var(--rule);border-radius:var(--r);
+  padding:6px 11px;font-size:12.5px;background:var(--paper-2);
+}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.d-qr{background:var(--qr)} .d-ar{background:var(--ar)}
+.d-gsr{background:var(--gsr)} .d-psr{background:var(--psr)}
+
+/* ---------- progress ticks ---------- */
+.ticks{display:flex;gap:3px;align-items:flex-end;height:16px}
+.tick{flex:1;height:6px;background:var(--grid-major);border-radius:1px;transition:height .2s,background .2s}
+.tick.done{height:12px;background:var(--ink-soft)}
+.tick.now{height:16px;background:var(--amber)}
+
+/* ---------- question ---------- */
+.qhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
+.stem{font-size:17px;line-height:1.55;margin:0 0 16px}
+.stem .mono{font-size:16.5px}
+.figure{margin:0 0 18px;text-align:center}
+.figure svg{max-width:100%;height:auto}
+
+.choices{display:grid;gap:9px}
+.choice{
+  display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;
+  padding:13px 15px;border:1px solid var(--rule);border-radius:var(--r);
+  background:var(--paper-2);font-size:16px;color:var(--ink);
+  transition:border-color .12s,background .12s;
+}
+.choice:hover{border-color:var(--blue);background:var(--blue-soft)}
+.choice .lab{
+  font-family:var(--f-display);font-weight:700;font-size:13px;
+  width:22px;height:22px;flex:none;border-radius:50%;
+  display:grid;place-items:center;border:1.5px solid var(--rule);
+  color:var(--ink-soft);margin-top:1px;
+}
+.choice.sel{border-color:var(--blue);background:var(--blue-soft);box-shadow:inset 0 0 0 1px var(--blue)}
+.choice.sel .lab{background:var(--blue);border-color:var(--blue);color:#fff}
+.choice.correct{border-color:var(--check);background:#EAF6F1}
+.choice.correct .lab{background:var(--check);border-color:var(--check);color:#fff}
+.choice.wrong{border-color:var(--pen);background:#FCEDF0}
+.choice.wrong .lab{background:var(--pen);border-color:var(--pen);color:#fff}
+.choice:disabled{cursor:default}
+.choice:disabled:hover{border-color:var(--rule);background:var(--paper-2)}
+.choice.sel:disabled:hover{border-color:var(--blue);background:var(--blue-soft)}
+.choice.correct:disabled:hover{border-color:var(--check);background:#EAF6F1}
+.choice.wrong:disabled:hover{border-color:var(--pen);background:#FCEDF0}
+
+.feedback{margin-top:14px;padding:14px 16px;border-radius:var(--r);font-size:14.5px;line-height:1.6}
+.fb-ok{background:#EAF6F1;border-left:3px solid var(--check)}
+.fb-no{background:#FCEDF0;border-left:3px solid var(--pen)}
+.feedback b{font-family:var(--f-display)}
+
+.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+
+/* ---------- SIGNATURE: the 910–990 rail ---------- */
+.rail-block{margin:26px 0 8px}
+.rail{
+  position:relative;height:46px;border:1px solid var(--rule);border-radius:var(--r);
+  background:
+    repeating-linear-gradient(90deg, var(--grid) 0 1px, transparent 1px 100%) 0 0/12.5% 100%,
+    linear-gradient(90deg,#F0F5FA,#FFFFFF);
+}
+.rail-cut{position:absolute;top:-7px;bottom:-7px;width:2px;background:var(--pen);left:50%}
+.rail-cut::after{
+  content:'950 cut';position:absolute;top:-17px;left:50%;transform:translateX(-50%);
+  font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--pen);white-space:nowrap;
+}
+.rail-fill{
+  position:absolute;top:0;bottom:0;left:0;width:0;
+  background:linear-gradient(90deg,rgba(44,88,166,.10),rgba(44,88,166,.28));
+  border-right:2.5px solid var(--blue);
+  transition:width 1.5s cubic-bezier(.22,1,.36,1);
+}
+.rail-fill.ready{background:linear-gradient(90deg,rgba(12,127,88,.10),rgba(12,127,88,.28));border-right-color:var(--check)}
+.rail-scale{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px;color:var(--ink-faint);margin-top:6px}
+.score-big{font-family:var(--f-mono);font-weight:700;font-size:clamp(42px,10vw,64px);line-height:1;letter-spacing:-.03em}
+.verdict{font-family:var(--f-display);font-weight:700;font-size:clamp(17px,3.6vw,21px);margin-top:6px}
+.v-ready{color:var(--check)} .v-not{color:var(--pen)}
+
+/* ---------- strand rails ---------- */
+.strand{padding:14px 0;border-top:1px solid var(--rule)}
+.strand:first-of-type{border-top:0}
+.strand-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
+.strand-name{font-family:var(--f-display);font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px}
+.band{font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:3px 9px;border-radius:var(--r);border:1px solid currentColor}
+.b-adv{color:var(--check)} .b-pro{color:var(--blue)} .b-bas{color:var(--pen)}
+.sbar{height:9px;background:var(--grid-major);border-radius:1px;overflow:hidden}
+.sbar > i{display:block;height:100%;width:0;transition:width 1s cubic-bezier(.22,1,.36,1)}
+.strand-meta{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-soft);margin-top:6px;gap:10px;flex-wrap:wrap}
+
+/* ---------- review ---------- */
+.rev{border-top:1px solid var(--rule);padding:16px 0}
+.rev-top{display:flex;gap:10px;align-items:baseline;margin-bottom:8px}
+.mark{font-family:var(--f-display);font-weight:700;font-size:12px;padding:2px 8px;border-radius:var(--r);color:#fff;flex:none}
+.m-ok{background:var(--check)} .m-no{background:var(--pen)}
+.rev details{margin-top:8px}
+.rev summary{cursor:pointer;font-size:13.5px;color:var(--blue);font-weight:500}
+.rev .sol{margin-top:9px;padding:12px 14px;background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);font-size:14px;line-height:1.65}
+
+/* ---------- data tables inside stems ---------- */
+table.dt{border-collapse:collapse;margin:0 auto;font-size:14px;font-family:var(--f-body)}
+table.dt th,table.dt td{border:1px solid var(--rule);padding:6px 13px;text-align:center}
+table.dt th{background:var(--paper);font-family:var(--f-display);font-weight:600;font-size:13px}
+table.dt td.mono,table.dt th.mono{font-family:var(--f-mono)}
+
+/* ---------- misc ---------- */
+.toggle{display:flex;gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;width:fit-content}
+.toggle button{padding:9px 16px;border:0;background:var(--paper-2);color:var(--ink-soft);font-family:var(--f-display);font-weight:600;font-size:13.5px}
+.toggle button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:13.5px}
+.kv dt{color:var(--ink-soft)} .kv dd{margin:0;font-family:var(--f-mono)}
+.note{font-size:12.5px;color:var(--ink-soft);line-height:1.6;border-left:2px solid var(--grid-major);padding-left:12px}
+.hidden{display:none !important}
+.back{
+  display:inline-block;margin-bottom:18px;font-family:var(--f-display);font-weight:600;
+  font-size:13px;color:var(--blue);text-decoration:none;
+}
+.back:hover{text-decoration:underline}
+.seedbox{font-family:var(--f-mono);font-size:12px;background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:8px 11px;word-break:break-all}
+.f-eq{font-family:var(--f-mono);font-size:1.02em}
+sup{font-size:.72em}
+
+@media (max-width:520px){
+  .card{padding:16px}
+  .stem{font-size:16px}
+  .choice{font-size:15px;padding:12px}
+  .actions .btn{flex:1}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important}
+}
+@media print{
+  body{background:#fff}
+  .actions,.btn{display:none}
+}
+</style>
+</head>
+<body>
+<!-- Same relative path the other modules use: this file lives in apps/ -->
+<script src="../portal-tsi.js"></script>
+<div class="wrap">
+
+<!-- ==================== INTRO ==================== -->
+<section id="intro">
+  <a class="back" href="../index.html">&larr; Back to TSI hub</a>
+  <p class="eyebrow">Texas Success Initiative Assessment 2.0</p>
+  <h1>Adaptive Math Practice<br>College Readiness Classification</h1>
+  <p class="muted" style="margin:14px 0 0;max-width:60ch">
+    Twenty questions that get harder when you're right and easier when you're wrong &mdash;
+    the same way the real CRC test works. At the end you get an estimated 910&ndash;990 score
+    and a breakdown of all four content strands.
+  </p>
+
+  <div class="card" style="margin-top:24px">
+    <p class="eyebrow" style="margin:0 0 12px">What you'll be asked</p>
+    <div class="chips" id="blueprintChips"></div>
+    <p class="note" style="margin-top:16px">
+      The real CRC test is untimed and does not let you go back. This one matches that:
+      answer each question, then move forward. Scratch paper and a calculator are fine.
+    </p>
+  </div>
+
+  <div class="card">
+    <p class="eyebrow" style="margin:0 0 10px">Feedback</p>
+    <div class="toggle" role="group" aria-label="Feedback timing">
+      <button id="modeTest" aria-pressed="true">Test mode</button>
+      <button id="modePractice" aria-pressed="false">Practice mode</button>
+    </div>
+    <p class="small muted" id="modeDesc" style="margin:10px 0 0">
+      Test mode: no feedback until the end. Closest to the real thing.
+    </p>
+  </div>
+
+  <div class="actions" style="justify-content:flex-start">
+    <button class="btn" id="startBtn">Start the 20 questions</button>
+  </div>
+
+  <details style="margin-top:26px">
+    <summary class="small" style="cursor:pointer;color:var(--blue)">Use a specific test code (teachers)</summary>
+    <div class="card" style="margin-top:10px">
+      <p class="small muted" style="margin:0 0 10px">
+        Every test is built from a code. Paste a code here to give a whole class the identical
+        20 questions, or leave it blank for a fresh random test.
+      </p>
+      <input id="seedIn" class="seedbox" style="width:100%" placeholder="e.g. TSI-7QK2F9" autocomplete="off">
+    </div>
+  </details>
+</section>
+
+<!-- ==================== TEST ==================== -->
+<section id="test" class="hidden">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px">
+    <p class="eyebrow" style="margin:0">Question <span id="qNum" class="mono">1</span> of 20</p>
+    <p class="eyebrow" id="strandLabel" style="margin:0">&nbsp;</p>
+  </div>
+  <div class="ticks" id="ticks" aria-hidden="true"></div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="figure" id="figure"></div>
+    <p class="stem" id="stem"></p>
+    <div class="choices" id="choices"></div>
+    <div id="feedback"></div>
+    <div class="actions">
+      <button class="btn" id="nextBtn" disabled>Submit answer</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== RESULTS ==================== -->
+<section id="results" class="hidden">
+  <p class="eyebrow">Your practice result</p>
+  <h1 style="margin-top:6px">Estimated CRC score</h1>
+
+  <div class="card" style="margin-top:18px">
+    <div class="score-big" id="scoreBig">&mdash;</div>
+    <div class="verdict" id="verdict">&nbsp;</div>
+    <div class="rail-block">
+      <div class="rail">
+        <div class="rail-fill" id="railFill"></div>
+        <div class="rail-cut" id="railCut"></div>
+      </div>
+      <div class="rail-scale"><span>910</span><span>930</span><span>950</span><span>970</span><span>990</span></div>
+    </div>
+    <p class="note" style="margin-top:18px" id="scoreNote"></p>
+  </div>
+
+  <h2 style="margin:30px 0 4px">The four strands</h2>
+  <p class="small muted" style="margin:0 0 14px">Where your time is best spent next.</p>
+  <div class="card" id="strandCards"></div>
+
+  <h2 style="margin:30px 0 14px">Every question, worked out</h2>
+  <div class="card" id="reviewList"></div>
+
+  <div class="card">
+    <p class="eyebrow" style="margin:0 0 10px">Save or share this result</p>
+    <dl class="kv" id="metaList"></dl>
+    <div class="seedbox" id="seedOut" style="margin-top:12px"></div>
+    <div class="actions" style="justify-content:flex-start;margin-top:14px">
+      <button class="btn btn-ghost btn-sm" id="copyBtn">Copy result code</button>
+      <button class="btn btn-ghost btn-sm" id="printBtn">Print / save PDF</button>
+      <button class="btn btn-sm" id="againBtn">Take a new test</button>
+    </div>
+  </div>
+</section>
+
+</div>
+<script>
+(function(){
+"use strict";
+
+/* ================================================================
+   TSIA2 ADAPTIVE CRC PRACTICE MODULE
+   ----------------------------------------------------------------
+   Structure of this file:
+     §1  Config + blueprint            (edit here to retune the test)
+     §2  Seeded RNG + question helpers
+     §3  SVG / table figure builders
+     §4  ITEM GENERATORS  (the bank — add new items here)
+     §5  Adaptive engine (1PL ability estimate + blueprint control)
+     §6  Scoring + strand bands
+     §7  UI
+     §8  Portal integration adapter    (<-- the one place to edit
+                                            when wiring into portal.js)
+   ================================================================ */
+
+/* ---------------- §1  CONFIG ---------------- */
+
+const CONFIG = {
+  testLength: 20,
+
+  /* Real CRC blueprint is not published item-by-item. This weighting
+     weighting is taken straight from SECTIONS in portal-tsi.js, so the
+     hub's "7 of 20 CRC items" eyebrows and this test always agree. If you
+     change one, change the other. They must sum to testLength. */
+  blueprint: { AR:7, QR:6, PSR:4, GSR:3 },
+
+  scoreMin: 910,
+  scoreMax: 990,
+  scoreCut: 950,      // official math college-readiness cut
+  thetaAtCut: 0,      // ability that maps to 950
+  thetaSpan: 2.0,     // theta of +2.0 -> 990, -2.0 -> 910
+
+  bandAdvanced: 0.60, // strand band thresholds on the strand index
+  bandProficient: -0.40
+};
+
+/* Keys, names and order all match SECTIONS in portal-tsi.js so a student
+   reading "Algebraic Reasoning" here lands on the same card on the hub. */
+const STRANDS = {
+  AR:  { key:'AR',  name:'Algebraic Reasoning',                     hub:'alg',
+         blurb:'Equations, systems, functions, factoring',        cls:'d-ar',  color:'var(--ar)'  },
+  QR:  { key:'QR',  name:'Quantitative Reasoning',                  hub:'quant',
+         blurb:'Ratios, proportions, percents, rates, scale',     cls:'d-qr',  color:'var(--qr)'  },
+  PSR: { key:'PSR', name:'Probabilistic and Statistical Reasoning', hub:'prob',
+         blurb:'Probability, measures of center, tables, charts', cls:'d-psr', color:'var(--psr)' },
+  GSR: { key:'GSR', name:'Geometric and Spatial Reasoning',         hub:'geo',
+         blurb:'Perimeter, area, volume, similarity, units',      cls:'d-gsr', color:'var(--gsr)' }
+};
+
+/* ---------------- §2  SEEDED RNG + HELPERS ---------------- */
+
+/* mulberry32 — small, fast, good enough. Seeded so a teacher can hand
+   out one code and every student gets the identical 20 questions. */
+function makeRng(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+function seedToCode(seed){
+  let n = seed >>> 0, s = '';
+  for(let i=0;i<6;i++){ s = CODE_ALPHABET[n % 32] + s; n = Math.floor(n/32); }
+  return 'TSI-' + s;
+}
+function codeToSeed(code){
+  const m = String(code||'').trim().toUpperCase().replace(/^TSI-/,'');
+  if(!/^[2-9A-HJ-NP-Z]{6}$/.test(m)) return null;
+  let n = 0;
+  for(const ch of m){ n = n*32 + CODE_ALPHABET.indexOf(ch); }
+  return n >>> 0;
+}
+
+let RNG = Math.random;
+const rnd  = () => RNG();
+const ri   = (lo,hi) => lo + Math.floor(rnd()*(hi-lo+1));          // inclusive ints
+const pick = arr => arr[Math.floor(rnd()*arr.length)];
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+const round1 = n => Math.round(n*10)/10;
+const round2 = n => Math.round(n*100)/100;
+const money  = n => '$' + n.toFixed(2);
+function gcd(a,b){ a=Math.abs(a); b=Math.abs(b); while(b){ [a,b]=[b,a%b]; } return a; }
+function frac(n,d){ const g = gcd(n,d)||1; return (n/g)+'/'+(d/g); }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* Build the four choices. Correct answer + distractors, deduped by
+   displayed text, padded if a distractor collided, then shuffled. */
+function mc(correct, distractors, pad){
+  const seen = new Set([String(correct)]);
+  const out  = [String(correct)];
+  for(const d of distractors){
+    const s = String(d);
+    if(!seen.has(s) && s !== 'NaN' && s !== 'Infinity'){ seen.add(s); out.push(s); }
+    if(out.length === 4) break;
+  }
+  let guard = 0;
+  while(out.length < 4 && guard++ < 60){
+    let s;
+    if(pad) s = String(pad(guard));
+    else {
+      const n = Number(String(correct).replace(/[^0-9.eE+-]/g,''));
+      if(!Number.isFinite(n)) break;          // non-numeric: cannot invent a sane option
+      s = String(round2(n + guard*ri(2,9)));
+    }
+    if(s && !seen.has(s) && !/NaN|Infinity/.test(s)){ seen.add(s); out.push(s); }
+  }
+  if(out.length < 4) console.warn('[tsi-crc] only', out.length, 'distinct options for', correct);
+  const answer = String(correct);
+  return { choices: shuffle(out), answer };
+}
+/* numeric distractor helper: nudges around the true value */
+function near(v, ...deltas){ return deltas.map(d => {
+  const x = v + d;
+  return Number.isInteger(v) && Number.isInteger(d) ? x : round1(x);
+}); }
+
+/* ---------------- §3  FIGURE BUILDERS ---------------- */
+/* All figures are inline SVG using the page's CSS variables, so they
+   restyle automatically if the tokens at the top of the file change. */
+
+const SW = 'stroke="var(--ink)" fill="none" stroke-width="1.6"';
+const TXT = 'font-family="var(--f-mono)" font-size="13" fill="var(--ink)"';
+const TXTS = 'font-family="var(--f-body)" font-size="11" fill="var(--ink-soft)"';
+
+function svgCircle(rLabel){
+  return `<svg viewBox="0 0 200 170" width="200" role="img" aria-label="Circle with radius ${esc(rLabel)}">
+    <circle cx="100" cy="85" r="62" ${SW}/>
+    <line x1="100" y1="85" x2="162" y2="85" stroke="var(--pen)" stroke-width="1.6"/>
+    <circle cx="100" cy="85" r="3" fill="var(--pen)"/>
+    <text x="131" y="78" text-anchor="middle" ${TXT} fill="var(--pen)">${esc(rLabel)}</text>
+  </svg>`;
+}
+
+function svgRightTriangle(aLab,bLab,cLab){
+  return `<svg viewBox="0 0 210 160" width="215" role="img" aria-label="Right triangle">
+    <path d="M55 130 L55 30 L165 130 Z" ${SW}/>
+    <path d="M55 118 L67 118 L67 130" ${SW} stroke-width="1.2"/>
+    <text x="44" y="83"  text-anchor="end"    ${TXT}>${esc(aLab)}</text>
+    <text x="110" y="147" text-anchor="middle" ${TXT}>${esc(bLab)}</text>
+    <text x="118" y="72"  text-anchor="middle" ${TXT} fill="var(--pen)">${esc(cLab)}</text>
+  </svg>`;
+}
+
+function svgPrism(l,w,h){
+  return `<svg viewBox="0 0 230 170" width="230" role="img" aria-label="Rectangular prism">
+    <path d="M35 60 L155 60 L155 135 L35 135 Z" ${SW}/>
+    <path d="M35 60 L75 25 L195 25 L155 60" ${SW}/>
+    <path d="M155 60 L195 25 L195 100 L155 135" ${SW}/>
+    <text x="95" y="152"  text-anchor="middle" ${TXT}>${esc(l)}</text>
+    <text x="26" y="101"  text-anchor="end"    ${TXT}>${esc(h)}</text>
+    <text x="182" y="20"  text-anchor="middle" ${TXT}>${esc(w)}</text>
+  </svg>`;
+}
+
+/* Outer rectangle with a notch cut from the top-right corner */
+function svgNotched(wLab,hLab,nw,nh){
+  /* The solid outline is the figure itself (tinted, so "the figure" needs no
+     colour word in the stem). The dashed corner is the piece that was removed,
+     and the two small dimensions are labelled ON the dashed edges — that way
+     they read as the notch, never as the full width or height. */
+  return `<svg viewBox="0 0 300 215" width="290" role="img"
+       aria-label="A rectangle ${esc(wLab)} wide and ${esc(hLab)} tall with a ${esc(nw)} by ${esc(nh)} rectangle removed from the top right corner">
+    <path d="M175 50 L250 50 L250 95" stroke="var(--ink-faint)" fill="none"
+          stroke-width="1.4" stroke-dasharray="5 4"/>
+    <path d="M50 50 L175 50 L175 95 L250 95 L250 180 L50 180 Z"
+          fill="var(--blue-soft)" stroke="var(--ink)" stroke-width="1.7"/>
+    <text x="212" y="42"  text-anchor="middle" ${TXT} fill="var(--ink-soft)">${esc(nw)}</text>
+    <text x="259" y="78"  text-anchor="start"  ${TXT} fill="var(--ink-soft)">${esc(nh)}</text>
+    <text x="150" y="201" text-anchor="middle" ${TXT}>${esc(wLab)}</text>
+    <text x="40"  y="115" text-anchor="middle" ${TXT} transform="rotate(-90 40 115)">${esc(hLab)}</text>
+  </svg>`;
+}
+
+function svgSimilar(a,b,x,d){
+  return `<svg viewBox="0 0 300 150" width="300" role="img" aria-label="Two similar right triangles">
+    <path d="M30 120 L30 35 L115 120 Z" ${SW}/>
+    <text x="22" y="82"  text-anchor="end"    ${TXT}>${esc(a)}</text>
+    <text x="72" y="137" text-anchor="middle" ${TXT}>${esc(b)}</text>
+    <path d="M180 120 L180 55 L265 120 Z" ${SW}/>
+    <text x="172" y="92" text-anchor="end"    ${TXT} fill="var(--pen)">${esc(x)}</text>
+    <text x="222" y="137" text-anchor="middle" ${TXT}>${esc(d)}</text>
+  </svg>`;
+}
+
+function svgBar(labels, vals, title){
+  const max = Math.max(...vals), W=330, H=180, pad=34, bw=(W-pad-14)/labels.length;
+  let bars='', ticks='';
+  vals.forEach((v,i)=>{
+    const h=(v/max)*(H-58), x=pad+i*bw+bw*0.18, y=H-30-h;
+    bars += `<rect x="${x}" y="${y}" width="${bw*0.64}" height="${h}" fill="var(--blue)" opacity=".82"/>`;
+    bars += `<text x="${x+bw*0.32}" y="${H-15}" text-anchor="middle" ${TXTS}>${esc(labels[i])}</text>`;
+  });
+  for(let t=0;t<=max;t+=Math.max(1,Math.ceil(max/5))){
+    const y=H-30-(t/max)*(H-58);
+    ticks += `<line x1="${pad-4}" y1="${y}" x2="${W-8}" y2="${y}" stroke="var(--grid)" stroke-width="1"/>
+              <text x="${pad-8}" y="${y+4}" text-anchor="end" ${TXTS}>${t}</text>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Bar chart: ${esc(title)}">
+    <text x="${W/2}" y="14" text-anchor="middle" ${TXTS} font-weight="600">${esc(title)}</text>
+    ${ticks}${bars}
+    <line x1="${pad-4}" y1="${H-30}" x2="${W-8}" y2="${H-30}" stroke="var(--ink)" stroke-width="1.4"/>
+  </svg>`;
+}
+
+function svgPie(slices){ // slices: [{label, pct}]
+  const cx=110, cy=100, r=68, cols=['var(--qr)','var(--ps)','var(--gs)','var(--ar)','var(--amber)'];
+  let ang=-Math.PI/2, paths='', labs='';
+  slices.forEach((s,i)=>{
+    const a2 = ang + (s.pct/100)*2*Math.PI, large = (s.pct/100)>0.5?1:0;
+    const x1=cx+r*Math.cos(ang), y1=cy+r*Math.sin(ang), x2=cx+r*Math.cos(a2), y2=cy+r*Math.sin(a2);
+    paths += `<path d="M${cx} ${cy} L${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z" fill="${cols[i%5]}" opacity=".85" stroke="#fff" stroke-width="1.5"/>`;
+    const mid=(ang+a2)/2, lx=cx+(r+26)*Math.cos(mid), ly=cy+(r+26)*Math.sin(mid);
+    labs += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" ${TXTS}>${esc(s.label)} ${s.pct}%</text>`;
+    ang=a2;
+  });
+  return `<svg viewBox="0 0 220 200" width="235" role="img" aria-label="Pie chart">${paths}${labs}</svg>`;
+}
+
+function svgDot(counts){ // counts: {value: n}
+  const vals=Object.keys(counts).map(Number).sort((a,b)=>a-b);
+  const W=280,H=150,pad=26,step=(W-2*pad)/(vals.length-1||1);
+  let dots='',axis='';
+  vals.forEach((v,i)=>{
+    const x=pad+i*step;
+    axis+=`<text x="${x}" y="${H-8}" text-anchor="middle" ${TXTS}>${v}</text>`;
+    for(let k=0;k<counts[v];k++) dots+=`<circle cx="${x}" cy="${H-38-k*17}" r="6" fill="var(--blue)" opacity=".85"/>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Dot plot">
+    ${dots}<line x1="${pad-12}" y1="${H-26}" x2="${W-pad+12}" y2="${H-26}" stroke="var(--ink)" stroke-width="1.4"/>${axis}
+  </svg>`;
+}
+
+function tableHTML(head, rows){
+  const th = head.map(h=>`<th>${esc(h)}</th>`).join('');
+  const tr = rows.map(r=>`<tr>${r.map((c,i)=>`<td class="${i?'mono':''}">${esc(c)}</td>`).join('')}</tr>`).join('');
+  return `<table class="dt"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+}
+
+/* ================================================================
+   §4  ITEM GENERATORS
+   ----------------------------------------------------------------
+   Every entry is:
+     id     unique string (used in the Portal record + review log)
+     strand QR | AR | GS | PS
+     b      difficulty on a logit scale. b = 0 is a borderline
+            college-ready item. -2 is very easy, +2 is hard.
+            These are judgment calls, not empirically calibrated —
+            see the note in the results screen.
+     skill  short human label, shown in the strand breakdown
+     gen()  returns { stem, figure?, choices[], answer, solution }
+
+   TO ADD AN ITEM: copy any block below, keep the return shape, and
+   push it into BANK. Nothing else needs to change — the blueprint
+   and the adaptive engine pick it up automatically.
+   ================================================================ */
+
+const BANK = [];
+const G = (id,strand,b,skill,gen) => BANK.push({id,strand,b,skill,gen});
+
+/* ---------- QUANTITATIVE REASONING ---------- */
+
+G('qr_pct_of','QR',-1.2,'Percent of a number',()=>{
+  const p = pick([12,15,24,35,42,60,78,85]), n = ri(24,180);
+  const v = round1(p*n/100);
+  const {choices,answer} = mc(v, near(v, -p/10, p/5, 10, -6).map(round1).concat([round1(n/p*100), round1(p*n)]));
+  return { stem:`What is ${p}% of ${n}?`,
+    solution:`"Percent of" means multiply. ${p}% = ${p/100}, so ${p/100} × ${n} = <b>${v}</b>.` ,
+    choices, answer };
+});
+
+G('qr_what_pct','QR',-0.6,'What percent of A is B',()=>{
+  const a = pick([40,50,60,80,108,120,150]), b = ri(10, a-4);
+  const v = round1(b/a*100)+'%';
+  const {choices,answer} = mc(v, [round1(a/b*100)+'%', round2(b/a)+'%', round1(b/a*100+10)+'%', round1((a-b)/a*100)+'%']);
+  return { stem:`What percent of ${a} is ${b}?`,
+    solution:`Set it up as a fraction of the whole: ${b} ÷ ${a} = ${round2(b/a)}. Move the decimal two places → <b>${v}</b>. The number after "of" is always the whole.`,
+    choices, answer };
+});
+
+G('qr_pct_change','QR',-0.4,'Percent increase/decrease',()=>{
+  const orig = pick([8,12,20,25,40,50,80]), drop = pick([2,3,4,5,6,10]).valueOf();
+  const d = Math.min(drop, orig-1), v = round1(d/orig*100)+'%';
+  const {choices,answer} = mc(v, [round1(d/(orig-d)*100)+'%', round1((orig-d)/orig*100)+'%', d+'%', round1(orig/d)+'%']);
+  return { stem:`A shirt originally cost $${orig}, but its price was reduced by $${d}. By what percent did the cost decrease?`,
+    solution:`Percent change = (amount of change ÷ <em>original</em> amount). That's ${d} ÷ ${orig} = ${round2(d/orig)} = <b>${v}</b>. The original price is the denominator, not the new price.`,
+    choices, answer };
+});
+
+G('qr_double_discount','QR',0.9,'Successive discounts',()=>{
+  const price = pick([5,8,12,20,24,40]), d1 = pick([20,25,40,50]), d2 = pick([10,20,25]);
+  const v = round2(price*(1-d1/100)*(1-d2/100));
+  const {choices,answer} = mc(money(v), [money(round2(price*(1-(d1+d2)/100))), money(round2(price-d1/100*price)), money(round2(price*(1-d2/100))), money(round2(v+1))]);
+  return { stem:`A box of cereal costs ${money(price)}, but it is on clearance for ${d1}% off, and Kenton also uses a ${d2}% off coupon. What is the final cost of the box of cereal?`,
+    solution:`Apply the discounts one at a time, not added together.<br>After ${d1}% off: ${money(price)} × ${1-d1/100} = ${money(round2(price*(1-d1/100)))}<br>Then ${d2}% off that: ${money(round2(price*(1-d1/100)))} × ${1-d2/100} = <b>${money(v)}</b>`,
+    choices, answer };
+});
+
+G('qr_total_discount','QR',1.2,'Combined percent discount',()=>{
+  const d1 = pick([20,25,40,50]), d2 = pick([10,20,25]);
+  const kept = (1-d1/100)*(1-d2/100), v = Math.round((1-kept)*100)+'%';
+  const {choices,answer} = mc(v, [(d1+d2)+'%', Math.round(kept*100)+'%', (d1+d2-5)+'%', Math.round((1-kept)*100+10)+'%']);
+  return { stem:`An item is marked ${d1}% off, and then a ${d2}% off coupon is applied to the reduced price. What is the total percent discount from the original price?`,
+    solution:`You cannot add ${d1}% + ${d2}%. Track what's <em>left</em> instead: ${1-d1/100} × ${1-d2/100} = ${round2(kept)}, so ${Math.round(kept*100)}% of the price remains. The discount is 100% − ${Math.round(kept*100)}% = <b>${v}</b>.`,
+    choices, answer };
+});
+
+G('qr_unit_buy','QR',-1.6,'Unit price',()=>{
+  const cost = pick([2,3,4,5]), total = cost*ri(3,9) + pick([0,0,1]);
+  const v = Math.floor(total/cost);
+  const {choices,answer} = mc(v, near(v,1,-1,2).concat([total*cost, total]));
+  return { stem:`One seedless watermelon costs $${cost}. How many seedless watermelons can Brenda buy if she has $${total}?`,
+    solution:`Divide the money by the price of one: $${total} ÷ $${cost} = ${round2(total/cost)}. She can only buy whole watermelons, so <b>${v}</b>.`,
+    choices, answer };
+});
+
+G('qr_rate_minutes','QR',0.1,'Rate, time, distance',()=>{
+  const mph = pick([4,5,6,8,10,12]), mi = pick([1,2,3,5]);
+  const v = Math.round(mi/mph*60);
+  const {choices,answer} = mc(v, near(v,5,-5,15,10,-10));
+  return { stem:`Running at an average rate of ${mph} miles per hour, how many minutes would it take Kyle to run ${mi} mile${mi>1?'s':''}?`,
+    solution:`Time = distance ÷ rate = ${mi} ÷ ${mph} = ${round2(mi/mph)} hours. Convert to minutes: ${round2(mi/mph)} × 60 = <b>${v} minutes</b>.`,
+    choices, answer };
+});
+
+G('qr_proportion_scale','QR',0.2,'Proportional reasoning',()=>{
+  const h1 = pick([1.5,1.8,2,2.5,3]), m1 = round1(h1*pick([3,4,4.5,5])), h2 = pick([6,8,10,12]);
+  const v = round1(m1/h1*h2);
+  const {choices,answer} = mc(v, near(v,-v/3,v/4,-8,12).map(round1));
+  return { stem:`Leif took ${h1} hours to make his postal deliveries over ${m1} miles. At the same speed, how many miles would he cover in ${h2} hours?`,
+    solution:`Find the rate first: ${m1} ÷ ${h1} = ${round1(m1/h1)} miles per hour. Then ${round1(m1/h1)} × ${h2} = <b>${v} miles</b>.`,
+    choices, answer };
+});
+
+G('qr_ratio_partition','QR',1.0,'Ratio partition',()=>{
+  const parts = pick([[5,12,13],[2,3,5],[3,4,5],[1,4,5],[2,4,6]]);
+  const sum = parts.reduce((a,c)=>a+c,0), total = sum*pick([0.5,1,1.5,2]);
+  const big = Math.max(...parts), v = round1(big/sum*total);
+  const {choices,answer} = mc(v+'m', [round1(Math.min(...parts)/sum*total)+'m', big+'m', round1(total/3)+'m', round1(v+2)+'m']);
+  return { stem:`Eowyn uses a ratio of ${parts.join(':')} to divide a rope with knots. The rope is ${total} meters long. How long is the longest section?`,
+    solution:`Add the ratio parts: ${parts.join(' + ')} = ${sum}. Each "part" is ${total} ÷ ${sum} = ${round2(total/sum)} m. The longest section is ${big} parts: ${big} × ${round2(total/sum)} = <b>${v} m</b>.`,
+    choices, answer };
+});
+
+G('qr_scale_map','QR',0.5,'Scale drawings',()=>{
+  const unit = pick([1.4,2,2.5]), miles = pick([30,45,50,60]), shown = round1(unit*pick([3,4,5,6]));
+  const v = Math.round(shown/unit*miles);
+  const {choices,answer} = mc(v+' mi', [Math.round(v/5)+' mi', Math.round(v*1.5)+' mi', Math.round(miles*unit)+' mi', Math.round(v-45)+' mi']);
+  return { stem:`A satellite image shows that Edinburg is ${shown} cm from San Antonio. The image says that ${unit} cm = ${miles} miles. Which is closest to the actual distance between the two cities?`,
+    solution:`Set up a proportion: ${unit} cm / ${miles} mi = ${shown} cm / <em>d</em>.<br>${shown} ÷ ${unit} = ${round1(shown/unit)}, so the distance is ${round1(shown/unit)} × ${miles} = <b>${v} miles</b>.`,
+    choices, answer };
+});
+
+G('qr_sci_notation','QR',1.3,'Scientific notation',()=>{
+  const a=pick([2,4,5,8]), pa=ri(6,9), b=pick([1.1,2.2,1.5,3]), pb=ri(4,6), c=pick([1.76,2.2,4,5]), pc=ri(6,8);
+  const mant = (a*b)/c, expn = -pa - pb - pc;
+  let m = mant, e = expn;
+  while(m >= 10){ m/=10; e++; } while(m < 1 && m>0){ m*=10; e--; }
+  m = round2(m);
+  const fmt = (mm,ee) => `${mm} × 10<sup>${ee}</sup>`;
+  const v = fmt(m,e);
+  const {choices,answer} = mc(v, [fmt(m,-e), fmt(round2(m*10),e-1), fmt(round2(m/10),e), fmt(m,e+2)]);
+  return { stem:`Given (${a} × 10<sup>&minus;${pa}</sup>)(${b} × 10<sup>&minus;${pb}</sup>) ÷ (${c} × 10<sup>${pc}</sup>), what is the result in scientific notation?`,
+    solution:`Handle the number parts and the powers separately.<br>Numbers: (${a} × ${b}) ÷ ${c} = ${round2(mant)}<br>Powers: multiply → add exponents (&minus;${pa} + &minus;${pb} = &minus;${pa+pb}); divide → subtract (&minus;${pa+pb} − ${pc} = ${expn}).<br>Then shift so the first number is between 1 and 10: <b>${v}</b>.`,
+    choices, answer };
+});
+
+G('qr_two_fare','QR',1.6,'Two-price mixture',()=>{
+  const riders = pick([100,80,120]), full = 1.00, disc = 0.50;
+  const nd = ri(Math.round(riders*0.3), Math.round(riders*0.85));
+  const total = round2(nd*disc + (riders-nd)*full);
+  const {choices,answer} = mc(nd, [riders-nd, Math.round(total), Math.round(riders-total), nd+10]);
+  return { stem:`A city bus charges $1.00 for a regular fare and $0.50 for a discount fare. If ${riders} people rode the bus and it collected ${money(total)}, how many discount fares were collected?`,
+    solution:`Let <em>d</em> be the discount fares, so ${riders} − <em>d</em> are regular.<br>0.50<em>d</em> + 1.00(${riders} − <em>d</em>) = ${total}<br>${riders} − 0.50<em>d</em> = ${total}<br>0.50<em>d</em> = ${round2(riders-total)}, so <em>d</em> = <b>${nd}</b>.`,
+    choices, answer };
+});
+
+G('qr_avg_speed','QR',0.7,'Average speed from clock times',()=>{
+  const startH = pick([7,8,9]), startM = pick([0,15,30,45]);
+  const hrs = pick([3,3.5,4,4.5,5]);
+  const endTot = startH*60+startM + hrs*60;
+  const eh = Math.floor(endTot/60), em = endTot%60;
+  const fmt = (h,m)=>`${((h+11)%12)+1}:${String(m).padStart(2,'0')}${h<12?'am':'pm'}`;
+  const mi = Math.round(hrs*pick([5,6,7,8]));
+  const v = Math.round(mi/hrs);
+  const {choices,answer} = mc(v+' mph', near(v,1,-1,2).map(x=>x+' mph'));
+  return { stem:`Faralyn left her post office at ${fmt(startH,startM)} to do her route and returned at ${fmt(eh,em)}. If her route is ${mi} miles of driving, which is closest to her average speed?`,
+    solution:`From ${fmt(startH,startM)} to ${fmt(eh,em)} is ${hrs} hours.<br>Average speed = distance ÷ time = ${mi} ÷ ${hrs} = ${round2(mi/hrs)}, closest to <b>${v} mph</b>.`,
+    choices, answer };
+});
+
+G('qr_context_expr','QR',0.8,'Expression from context',()=>{
+  const p1 = pick([75,60,80]), p2 = pick([50,40,25]);
+  const g = gcd(p1,p2), a = p1/g, b = p2/g;
+  const v = `T = ${g}(${a}d + ${b}c)`;
+  const {choices,answer} = mc(v, [`T = ${p1*p2}dc`, `T = ${g}(${b}d + ${a}c)`, `T = ${g}dc`, `T = ${a}d + ${b}c`]);
+  return { stem:`At a snack bar, drinks cost ${p1}¢ and bags of chips cost ${p2}¢. Let <em>d</em> and <em>c</em> be the number of drinks and chips in a purchase. Which could represent <em>T</em>, the total cost in cents?`,
+    solution:`Total = ${p1}d + ${p2}c. Every choice here is factored, so factor out the common ${g}:<br>${p1}d + ${p2}c = <b>${g}(${a}d + ${b}c)</b><br>Check by distributing: ${g} × ${a} = ${p1} ✓ and ${g} × ${b} = ${p2} ✓`,
+    choices, answer };
+});
+
+G('qr_direct_var','QR',0.6,'Direct variation',()=>{
+  const x1 = pick([6,8,9,10]), y1 = pick([4,6,12,15]), x2 = x1*pick([1.5,2,2.5]);
+  const v = round1(y1*x2/x1);
+  const {choices,answer} = mc(v, near(v,-v/3,v/2,2,-2).map(round1));
+  return { stem:`If <em>X</em> varies directly with <em>Y</em>, and <em>X</em> is ${x1} when <em>Y</em> is ${y1}, then what is <em>Y</em> when <em>X</em> is ${x2}?`,
+    solution:`Direct variation means the ratio stays constant: ${x1}/${y1} = ${x2}/<em>Y</em>.<br>Cross-multiply: ${x1}<em>Y</em> = ${y1} × ${x2} = ${y1*x2}, so <em>Y</em> = <b>${v}</b>.`,
+    choices, answer };
+});
+
+/* ---------- ALGEBRAIC REASONING ---------- */
+
+G('ar_linear_solve','AR',-0.8,'Solve a linear equation',()=>{
+  const x = ri(-9,12), a = pick([2,3,4,5,6]), b = ri(-12,12), c = pick([1,2,3]);
+  const rhs = a*x + b + c*x;   // (a+c)x + b = rhs
+  const {choices,answer} = mc(x, near(x,1,-1,2,-3,5));
+  return { stem:`Solve for <em>x</em>: <span class="f-eq">${a}x ${b<0?'&minus; '+(-b):'+ '+b} + ${c}x = ${rhs}</span>`,
+    solution:`Combine like terms on the left: ${a}x + ${c}x = ${a+c}x, so ${a+c}x ${b<0?'− '+(-b):'+ '+b} = ${rhs}.<br>${b<0?'Add '+(-b):'Subtract '+b} from both sides: ${a+c}x = ${rhs-b}.<br>Divide by ${a+c}: x = <b>${x}</b>.`,
+    choices, answer };
+});
+
+G('ar_linear_fraction','AR',0.4,'Linear equation with fractions',()=>{
+  const x = pick([3,4,5,6,8]), d1 = pick([2,4]), d2 = 3;
+  const rhs = round2(x/1 * (1/d1*4) + (2*x-2)/d2);
+  const r = (4*x)/d1/1;
+  const total = round2((4*x)/d1 + (2*x-2)/d2);
+  if(!Number.isInteger(total)) { /* fall through, still fine as decimal */ }
+  const {choices,answer} = mc(x, near(x,1,-1,3,-2));
+  return { stem:`Solve for <em>x</em>: <span class="f-eq">(${4}x)/${d1} + (2x &minus; 2)/${d2} = ${total}</span>`,
+    solution:`Clear the fractions by multiplying every term by the least common denominator, ${d1*d2/gcd(d1,d2)}.<br>Then combine like terms and isolate <em>x</em>.<br>Checking x = ${x}: (${4*x})/${d1} + (${2*x-2})/${d2} = ${round2(4*x/d1)} + ${round2((2*x-2)/d2)} = ${total} ✓<br>x = <b>${x}</b>.`,
+    choices, answer };
+});
+
+G('ar_system_solve','AR',0.2,'Solve a system of equations',()=>{
+  const x = ri(-4,7), y = ri(-4,7);
+  const a1=pick([-4,-2,2,3]), b1=pick([-5,-3,3,5]), a2=pick([1,-1,2]), b2=pick([-2,2,5]);
+  const c1=a1*x+b1*y, c2=a2*x+b2*y;
+  const f=(a,b,c)=>`${a}x ${b<0?'&minus; '+Math.abs(b):'+ '+b}y = ${c}`;
+  const v=`(${x}, ${y})`;
+  const {choices,answer} = mc(v, [`(${y}, ${x})`, `(${x}, ${-y})`, `(${x+1}, ${y-1})`, `(${-x}, ${y})`,
+                                  `(${x}, ${y+2})`, `(${x-2}, ${y})`, `(${x+3}, ${y+1})`]);
+  return { stem:`Solve the system of equations:<br><span class="f-eq">${f(a1,b1,c1)}<br>${f(a2,b2,c2)}</span>`,
+    solution:`Use elimination or substitution. Solving the second equation for one variable and substituting into the first gives x = ${x} and y = ${y}.<br>Check both: ${a1}(${x}) ${b1<0?'−':'+'} ${Math.abs(b1)}(${y}) = ${c1} ✓ and ${a2}(${x}) ${b2<0?'−':'+'} ${Math.abs(b2)}(${y}) = ${c2} ✓<br>Answer: <b>(${x}, ${y})</b>`,
+    choices, answer };
+});
+
+G('ar_system_count','AR',0.8,'Number of solutions to a system',()=>{
+  const type = pick(['none','one','inf']);
+  const a=pick([2,3,4]), b=pick([3,5,6]), c=ri(2,9), k=pick([2,3]);
+  let e1,e2,v,why;
+  if(type==='none'){ e1=`${a*k}x + ${b*k}y = ${c*k+1}`; e2=`${a}x + ${b}y = ${c}`;
+    v='None'; why=`Multiply the second equation by ${k}: ${a*k}x + ${b*k}y = ${c*k}. That has the same left side as the first equation but a different right side (${c*k+1} ≠ ${c*k}). Two parallel lines never cross → <b>no solution</b>.`; }
+  else if(type==='inf'){ e1=`${a*k}x + ${b*k}y = ${c*k}`; e2=`${a}x + ${b}y = ${c}`;
+    v='More than two'; why=`Multiply the second equation by ${k} and you get the first equation exactly. They are the same line, so every point on it works → infinitely many solutions, which is <b>more than two</b>.`; }
+  else { e1=`${a}x + ${b}y = ${c}`; e2=`${a+1}x ${b-1<0?'&minus; '+Math.abs(b-1):'+ '+(b-1)}y = ${c+2}`;
+    v='One'; why=`The two lines have different slopes, so they cross exactly once → <b>one solution</b>.`; }
+  const {choices,answer} = mc(v, ['None','One','Two','More than two']);
+  return { stem:`How many solutions (<em>x</em>, <em>y</em>) are there to this system of equations?<br><span class="f-eq">${e1}<br>${e2}</span>`,
+    solution:why, choices, answer };
+});
+
+G('ar_slope_points','AR',-0.5,'Slope from two points',()=>{
+  let x1,y1,x2,y2,num,den;
+  do{ x1=ri(-6,6); y1=ri(-8,8); x2=ri(-6,6); y2=ri(-8,8); num=y2-y1; den=x2-x1; }
+  while(den===0 || num===0 || Math.abs(num%den)!==0);
+  const m = num/den;
+  const {choices,answer} = mc(m, [-m, round2(den/num), -round2(den/num), m+1, m-1]);
+  return { stem:`A line goes through the points (${x1}, ${y1}) and (${x2}, ${y2}). What is the slope of the line?`,
+    solution:`Slope = rise over run = (y₂ − y₁) / (x₂ − x₁).<br>= (${y2} − ${y1}) / (${x2} − ${x1}) = ${num} / ${den} = <b>${m}</b><br>Keep the points in the same order in the top and bottom — swapping one but not the other flips the sign.`,
+    choices, answer };
+});
+
+G('ar_perp_slope','AR',0.1,'Perpendicular slopes',()=>{
+  let num,den,g,n,d;
+  do { num=pick([1,2,3,4,5]); den=pick([1,2,3,4]); g=gcd(num,den); n=num/g; d=den/g; }
+  while(n===d);                       // slope +/-1 is its own reciprocal -> options collide
+  const sign = pick([1,-1]);
+  const mStr = (sign<0?'−':'') + (d===1? n : `${n}/${d}`);
+  const pv = (sign<0?'':'−') + (n===1? d : `${d}/${n}`);
+  const {choices,answer} = mc(pv, [(sign<0?'−':'')+(n===1?d:`${d}/${n}`), (sign<0?'':'−')+(d===1?n:`${n}/${d}`), mStr, (sign<0?'':'−')+(n===1?d*2:`${d*2}/${n}`)]);
+  return { stem:`Line R has a slope of ${mStr}. Line S is perpendicular to Line R. What is the slope of Line S?`,
+    solution:`Perpendicular slopes are <em>negative reciprocals</em>: flip the fraction, then flip the sign.<br>${mStr} → flip → ${(sign<0?'−':'')+(n===1?d:`${d}/${n}`)} → change sign → <b>${pv}</b><br>Check: ${mStr} × ${pv} = −1 ✓`,
+    choices, answer };
+});
+
+G('ar_quad_factor','AR',0.7,'Factor a quadratic',()=>{
+  const a=pick([2,3]); let r1,r2;
+  do { r1=pick([1,2,3]); r2=pick([1,2,5]); } while(r1===r2);
+  const s1=pick([1,-1]), s2=pick([1,-1]);
+  // (a x + s1*r1)(x + s2*r2)
+  const B = a*s2*r2 + s1*r1, C = s1*r1*s2*r2;
+  const f = `${a}x² ${B<0?'&minus; '+Math.abs(B):'+ '+B}x ${C<0?'&minus; '+Math.abs(C):'+ '+C}`;
+  const v = `(${a}x ${s1*r1<0?'&minus; '+Math.abs(s1*r1):'+ '+(s1*r1)})`;
+  const opt = k => `(${a}x ${k<0?'&minus; '+Math.abs(k):'+ '+k})`;
+  const {choices,answer} = mc(v, [opt(-s1*r1), opt(s2*r2), opt(-s2*r2), opt(s1*r1+a), opt(s1*r1-a)]);
+  return { stem:`Which of these is a factor of the expression <span class="f-eq">${f}</span>?`,
+    solution:`Factoring gives (${a}x ${s1*r1<0?'− '+Math.abs(s1*r1):'+ '+(s1*r1)})(x ${s2*r2<0?'− '+Math.abs(s2*r2):'+ '+(s2*r2)}).<br>Multiply it back to check: outer + inner = ${a}·${s2*r2} + ${s1*r1} = ${B}x ✓ and last × last = ${C} ✓<br>So <b>${v}</b> is a factor.`,
+    choices, answer };
+});
+
+G('ar_quad_notfactor','AR',1.1,'Identify a NON-factor',()=>{
+  const k=pick([3,4,2]); let r1,r2;
+  do { r1=pick([2,3,4,8]); r2=pick([6,8,3]); } while(r1===r2);
+  const B=k*(r1+r2), C=k*r1*r2;
+  const f=`${k}x² + ${B}x + ${C}`;
+  const notF = `(x &minus; ${r1})`;
+  const {choices,answer} = mc(notF, [`${k}`, `(x + ${r1})`, `(x + ${r2})`]);
+  return { stem:`Which of the following is NOT a factor of <span class="f-eq">${f}</span>?`,
+    solution:`Factor out ${k} first: ${k}(x² + ${r1+r2}x + ${r1*r2}) = ${k}(x + ${r1})(x + ${r2}).<br>So ${k}, (x + ${r1}), and (x + ${r2}) are all factors. Both signs inside are <em>plus</em>, so <b>(x − ${r1})</b> is not.`,
+    choices, answer };
+});
+
+G('ar_quad_roots','AR',0.3,'Solve a quadratic',()=>{
+  const r1=ri(-9,-1), r2=ri(-9,-1);
+  const b=-(r1+r2), c=r1*r2;
+  const v = `{${r1}, ${r2}}`.replace(/\{(-?\d+), \1\}/, '{$1}');
+  const {choices,answer} = mc(v, [`{${-r1}, ${-r2}}`, `{${r1}, ${r2-1}}`, `{${r1+1}, ${r2}}`, `{${r1-1}, ${r2+1}}`]);
+  return { stem:`Solve: <span class="f-eq">m² ${b<0?'&minus; '+Math.abs(b):'+ '+b}m + ${c} = 0</span>`,
+    solution:`Find two numbers that multiply to ${c} and add to ${b}: ${r1} and ${r2}.<br>So (m ${r1<0?'+ '+Math.abs(r1):'− '+r1})(m ${r2<0?'+ '+Math.abs(r2):'− '+r2}) = 0.<br>Set each factor to zero → m = <b>${r1}</b> and m = <b>${r2}</b>.`,
+    choices, answer };
+});
+
+G('ar_diff_squares','AR',0.2,'Difference of squares',()=>{
+  const k=pick([3,4,5,6,7,8]), k2=k*k;
+  const v = `x² &minus; ${k2} = 0`;
+  const {choices,answer} = mc(v, [`x² + ${k2} = 0`, `x² + ${2*k}x &minus; ${k2} = 0`, `x² &minus; ${k}x &minus; ${k2} = 0`]);
+  return { stem:`For which of the following equations are <em>x</em> = ${k} and <em>x</em> = &minus;${k} both solutions?`,
+    solution:`If ${k} and −${k} are both roots, the factors are (x − ${k})(x + ${k}), which multiplies out to x² − ${k2}. The middle terms cancel.<br>So the equation is <b>x² − ${k2} = 0</b>.<br>x² + ${k2} = 0 has no real solutions at all — a square plus a positive is never zero.`,
+    choices, answer };
+});
+
+G('ar_vertex_yint','AR',0.6,'y-intercept of a function',()=>{
+  const a=pick([2,3,-2,1]), h=pick([2,3,-1,4]), k=pick([-5,-3,1,6]);
+  const v = a*h*h + k;
+  const {choices,answer} = mc(v, [k, -v, a*h*h, k-a*h, 0]);
+  return { stem:`What is the y-intercept of the function <span class="f-eq">f(x) = ${a}(x ${h<0?'+ '+Math.abs(h):'&minus; '+h})² ${k<0?'&minus; '+Math.abs(k):'+ '+k}</span>?`,
+    solution:`The y-intercept is the value of the function when x = 0. Substitute:<br>f(0) = ${a}(0 ${h<0?'+ '+Math.abs(h):'− '+h})² ${k<0?'− '+Math.abs(k):'+ '+k} = ${a}(${-h})² ${k<0?'− '+Math.abs(k):'+ '+k} = ${a}(${h*h}) ${k<0?'− '+Math.abs(k):'+ '+k} = <b>${v}</b><br>A common slip is answering ${k} — that's the <em>y-value of the vertex</em>, not the y-intercept.`,
+    choices, answer };
+});
+
+G('ar_radical_eq','AR',0.9,'Solve a radical equation',()=>{
+  const sub=pick([4,5,9,12]), out=pick([2,3,1]), rhs=pick([6,7,8,9]);
+  const root = rhs-out, v = root*root + sub;
+  const {choices,answer} = mc(v, [rhs*rhs+sub, root*root-sub, rhs-sub, root*root]);
+  return { stem:`Which value of <em>t</em> is a solution to <span class="f-eq">&radic;(t &minus; ${sub}) + ${out} = ${rhs}</span>?`,
+    solution:`Isolate the radical first: √(t − ${sub}) = ${rhs} − ${out} = ${root}.<br>Then square both sides: t − ${sub} = ${root*root}.<br>t = <b>${v}</b><br>Check: √(${v} − ${sub}) + ${out} = √${root*root} + ${out} = ${root} + ${out} = ${rhs} ✓`,
+    choices, answer };
+});
+
+G('ar_arith_seq','AR',1.0,'Arithmetic sequence sum',()=>{
+  const a1=pick([8,10,12,14]), d=pick([2,3,4,5]), n=pick([10,12,15]);
+  const v = n/2*(2*a1 + (n-1)*d);
+  const {choices,answer} = mc(v, [a1 + (n-1)*d, n*a1, v/2, v + n*d]);
+  return { stem:`A drive-in theater has ${a1} spaces for cars in the first row. Each row after that has ${d} more spaces than the row before it. If there are ${n} rows, how many parking spaces does the drive-in have in total?`,
+    solution:`The last row has ${a1} + (${n} − 1)(${d}) = ${a1+(n-1)*d} spaces.<br>For a sequence like this, the total is the number of rows times the average of the first and last row:<br>${n} × (${a1} + ${a1+(n-1)*d})/2 = ${n} × ${(a1+a1+(n-1)*d)/2} = <b>${v}</b><br>Answering ${a1+(n-1)*d} gives only the last row, not the total.`,
+    choices, answer };
+});
+
+G('ar_perim_algebra','AR',0.3,'Set up an equation from a perimeter',()=>{
+  const diff=pick([4,6,8,10]), L=pick([11,13,15,17,20]);
+  const W=L-diff, P=2*(L+W);
+  const {choices,answer} = mc(W, [L, P/4, L+diff, W+diff*2]);
+  return { stem:`The width of a rectangle is ${diff} less than the length. If the perimeter is ${P}, what is the width?`,
+    solution:`Let L be the length, so the width is L − ${diff}.<br>Perimeter: 2(L) + 2(L − ${diff}) = ${P}<br>4L − ${2*diff} = ${P} → 4L = ${P+2*diff} → L = ${L}<br>Width = ${L} − ${diff} = <b>${W}</b><br>The question asks for the width, not the length — ${L} is the trap answer.`,
+    choices, answer };
+});
+
+G('ar_area_perim','AR',1.5,'Quadratic from an area',()=>{
+  const x=pick([7,8,9,6]), a=pick([5,4,6]), b=pick([1,2,3]);
+  const L=x+a, W=x-b, area=L*W, per=2*(L+W);
+  const {choices,answer} = mc(per, [area, L+W, per+4, 2*L]);
+  return { stem:`The length and width of a rectangle are represented by (x + ${a}) and (x &minus; ${b}). If its area is ${area}, what is its perimeter?`,
+    solution:`Area: (x + ${a})(x − ${b}) = ${area} → x² + ${a-b}x − ${a*b} = ${area} → x² + ${a-b}x − ${a*b+area} = 0.<br>This factors to (x − ${x})(x + ${(a*b+area)/x}) = 0, so x = ${x} (a negative length makes no sense).<br>Length = ${L}, width = ${W}.<br>Perimeter = 2(${L}) + 2(${W}) = <b>${per}</b><br>${area} is the area you were given — read the last line of the question carefully.`,
+    choices, answer };
+});
+
+G('ar_translate','AR',-0.7,'Translate words into an equation',()=>{
+  const k=pick([3,4,5]), r=pick([12,10,20]);
+  const v = `½N &minus; ${k} = ${r}`;
+  const {choices,answer} = mc(v, [`½(N &minus; ${k}) = ${r}`, `${k} &minus; ½N = ${r}`, `½(${k} &minus; N) = ${r}`]);
+  return { stem:`"${k===3?'Three':k===4?'Four':'Five'} less than half of a number is ${r===12?'twelve':r===10?'ten':'twenty'}." Which equation represents that statement?`,
+    solution:`"Half of a number" is ½N. "${k} less than" that means you subtract ${k} <em>from</em> ½N, so ½N − ${k}.<br>"Is ${r}" means = ${r}.<br><b>½N − ${k} = ${r}</b><br>"${k} less than X" is always X − ${k}, never ${k} − X. And ½(N − ${k}) would be "half of the difference", which is a different statement.`,
+    choices, answer };
+});
+
+G('ar_inequality_budget','AR',-0.2,'Solve an inequality in context',()=>{
+  const budget=pick([48,60,75,90]), n=pick([30,25,20,15]);
+  const v = money(budget/n);
+  const {choices,answer} = mc(v, [money(round2(budget/n+0.20)), money(round2(budget/n-0.20)), money(round2(budget/n*2)), money(n/10)]);
+  return { stem:`The most Audelio wants to spend on candy is $${budget}. The average cost per candy is <em>C</em>. What is the largest value <em>C</em> could be if he bought ${n} candies?`,
+    solution:`${n} candies at <em>C</em> each must stay at or under $${budget}:<br>${n}C ≤ ${budget}<br>C ≤ ${budget} ÷ ${n} = <b>${v}</b><br>The largest allowed value is exactly at the boundary, since "the most he wants to spend" includes spending all of it.`,
+    choices, answer };
+});
+
+/* ---------- GEOMETRIC & SPATIAL REASONING ---------- */
+
+G('gs_circumference','GSR',-0.9,'Circumference of a circle',()=>{
+  const r=ri(3,15), v=round1(2*3.14*r);
+  const {choices,answer} = mc(v, [round1(3.14*r*r), round1(3.14*r), round1(2*3.14*r*r), round1(v+6)]);
+  return { figure:svgCircle(r),
+    stem:`The radius of the circle is ${r}. What is the circumference of the circle? (Use &pi; &asymp; 3.14 and round to the nearest tenth.)`,
+    solution:`Circumference = 2&pi;r = 2 × 3.14 × ${r} = <b>${v}</b><br>The other big number, ${round1(3.14*r*r)}, is the <em>area</em> (&pi;r²). Circumference is the distance around; area is the space inside.`,
+    choices, answer };
+});
+
+G('gs_circle_area','GSR',-0.7,'Area of a circle',()=>{
+  const r=ri(3,14), v=round1(3.14*r*r);
+  const {choices,answer} = mc(v, [round1(2*3.14*r), round1(3.14*2*r*r), round1(3.14*r), round1(v+5)]);
+  return { figure:svgCircle(r),
+    stem:`The radius of the circle is ${r}. What is the area of the circle? (Use &pi; &asymp; 3.14 and round to the nearest tenth.)`,
+    solution:`Area = &pi;r² = 3.14 × ${r}² = 3.14 × ${r*r} = <b>${v}</b><br>Square the radius <em>before</em> multiplying by &pi;. ${round1(2*3.14*r)} is the circumference.`,
+    choices, answer };
+});
+
+G('gs_rect_len','GSR',-0.1,'Perimeter with a length relationship',()=>{
+  const w=pick([28,36,42,56,60]), L=2*w, P=2*(L+w);
+  const {choices,answer} = mc(L+' ft.', [w+' ft.', (P/4)+' ft.', (L+w)+' ft.', (L-18)+' ft.']);
+  return { stem:`A rectangular garden has a perimeter of ${P} feet. The length is twice the width. What is the length of the garden?`,
+    solution:`Let the width be <em>w</em>, so the length is 2<em>w</em>.<br>Perimeter: 2(2w) + 2(w) = 6w = ${P} → w = ${w}<br>Length = 2 × ${w} = <b>${L} ft.</b><br>${w} ft. is the width — the question asks for the length.`,
+    choices, answer };
+});
+
+G('gs_rect_area_perim','GSR',0.2,'Area from perimeter and one side',()=>{
+  const L=pick([90,80,70,60]), P=pick([240,260,220,200]);
+  const W=P/2-L;
+  if(W<=0) return BANK.find(g=>g.id==='gs_rect_len').gen();
+  const v=L*W;
+  const {choices,answer} = mc(v+' ft. sq.', [(L*P)+' ft. sq.', (L*(P-L))+' ft. sq.', (2*(L+W))+' ft. sq.', (L+W)+' ft. sq.']);
+  return { stem:`A rectangular garden has a perimeter of ${P} feet. The length is ${L} feet. What is the area of the garden?`,
+    solution:`Perimeter = 2L + 2W, so 2(${L}) + 2W = ${P} → ${2*L} + 2W = ${P} → W = ${W} feet.<br>Area = length × width = ${L} × ${W} = <b>${v} ft. sq.</b><br>The trap is using ${P} or ${P/2} as a side length — you have to solve for the width first.`,
+    choices, answer };
+});
+
+G('gs_pythag_hyp','GSR',-0.4,'Pythagorean theorem',()=>{
+  const trip=pick([[3,4,5],[6,8,10],[5,12,13],[8,15,17],[9,12,15],[10,24,26],[7,24,25],[20,21,29]]);
+  const k=pick([1,1,1,2]);
+  const [a,b,c]=trip.map(n=>n*k);
+  const {choices,answer} = mc(c, [a+b, c+2, c-2, Math.round(Math.sqrt(b*b-a*a))]);
+  return { figure:svgRightTriangle(a,b,'?'),
+    stem:`This right triangle has legs of the lengths shown. What is the length of the hypotenuse?`,
+    solution:`a² + b² = c²<br>${a}² + ${b}² = ${a*a} + ${b*b} = ${a*a+b*b}<br>c = &radic;${a*a+b*b} = <b>${c}</b><br>Note that ${a} + ${b} = ${a+b} is <em>not</em> the answer — you can't just add the legs.`,
+    choices, answer };
+});
+
+G('gs_pythag_leg','GSR',0.5,'Pythagorean theorem, missing leg',()=>{
+  const trip=pick([[8,15,17],[5,12,13],[9,12,15],[7,24,25],[12,16,20],[15,20,25]]);
+  const [a,b,c]=trip;
+  const {choices,answer} = mc(a, [c-b, Math.round(Math.sqrt(c*c+b*b)), a+2, b-a]);
+  return { figure:svgRightTriangle('a', b, c),
+    stem:`For the right triangle shown, the hypotenuse is ${c} and one leg is ${b}. What is the value of <em>a</em>?`,
+    solution:`a² + b² = c², so a² = c² − b².<br>a² = ${c}² − ${b}² = ${c*c} − ${b*b} = ${c*c-b*b}<br>a = &radic;${c*c-b*b} = <b>${a}</b><br>Here you <em>subtract</em>, because you're solving for a leg and not the hypotenuse. ${c-b} (just subtracting the sides) is the trap.`,
+    choices, answer };
+});
+
+G('gs_prism_volume','GSR',-0.6,'Volume of a rectangular prism',()=>{
+  const l=ri(3,12), w=ri(2,9), h=ri(2,9), v=l*w*h;
+  const {choices,answer} = mc(v, [l+w+h, 2*(l*w+l*h+w*h), l*w, v+10]);
+  return { figure:svgPrism(l,w,h),
+    stem:`The rectangular prism has the dimensions shown. What is its volume?`,
+    solution:`Volume = length × width × height = ${l} × ${w} × ${h} = <b>${v}</b><br>${2*(l*w+l*h+w*h)} would be the <em>surface area</em>, and ${l+w+h} is just the dimensions added.`,
+    choices, answer };
+});
+
+G('gs_composite_area','GSR',1.2,'Area of a composite figure',()=>{
+  const a=pick([3,4,5,6]), b=pick([3,4,6,7]), nw=pick([2,3,4]), nh=pick([2,3,4]);
+  const B=a+b, C=a*b-nw*nh;
+  const f=(c)=>`x² + ${B}x ${c<0?'&minus; '+Math.abs(c):'+ '+c}`;
+  const {choices,answer} = mc(f(C), [f(a*b), f(a*b+nw*nh), f(a*b-nw), `x² + ${B-2}x + ${C}`]);
+  return { figure:svgNotched(`x + ${a}`, `x + ${b}`, nw, nh),
+    stem:`A ${nw} by ${nh} rectangle has been removed from the corner of a larger rectangle, leaving the figure shown. Which expression represents the area of this figure?`,
+    solution:`Find the whole rectangle, then subtract the piece that was removed.<br>Whole rectangle: (x + ${a})(x + ${b}) = x² + ${B}x + ${a*b}<br>Removed corner: ${nw} × ${nh} = ${nw*nh}<br>What's left: x² + ${B}x + ${a*b} − ${nw*nh} = <b>${f(C)}</b><br>Only the constant term changes — taking away a fixed area never affects the x² or x terms.`,
+    choices, answer };
+});
+
+G('gs_similar_tri','GSR',0.3,'Similar triangles',()=>{
+  const a=pick([9,12,6,8]), b=pick([6,4,5,3]), d=pick([9,12,10,15]);
+  const v = round1(a*d/b);
+  const {choices,answer} = mc(v, [round1(b*d/a), round1(a*b/d), round1(v+1.5), a+d-b]);
+  return { figure:svgSimilar(a,b,'x',d),
+    stem:`These two triangles are similar. Using the corresponding side lengths shown, what is the value of <em>x</em>?`,
+    solution:`In similar figures, matching sides stay in the same ratio. Line up matching sides:<br>${a}/${b} = x/${d}<br>Cross-multiply: ${b}x = ${a} × ${d} = ${a*d} → x = <b>${v}</b><br>The most common error is pairing sides that don't correspond, which gives ${round1(b*d/a)}.`,
+    choices, answer };
+});
+
+G('gs_shadow','GSR',0.4,'Indirect measurement with shadows',()=>{
+  let ps,ph; do { ps=pick([12,10,8,6]); ph=pick([5,6,4]); } while(ps===ph);
+  const ts=ps*pick([3,4,5,6]);
+  const v = round1(ts/ps*ph);
+  const {choices,answer} = mc(v+'ft', [round1(ts/ph*ps)+'ft', round1(v-5)+'ft', round1(v+5)+'ft', ts+'ft',
+                                       round1(v-10)+'ft', round1(v+10)+'ft']);
+  return { stem:`A tree has a shadow that is ${ts} ft long. Mr. Stroop is standing near the tree and has a shadow that is ${ps} ft long. If Mr. Stroop is ${ph} ft tall, how tall is the tree?`,
+    solution:`The tree and the person make similar triangles with the sun, so height and shadow stay in the same ratio:<br>${ph}/${ps} = h/${ts}<br>${ps}h = ${ph} × ${ts} = ${ph*ts} → h = <b>${v} ft</b><br>Or shortcut: the tree's shadow is ${ts/ps}× longer, so the tree is ${ts/ps}× taller: ${ph} × ${ts/ps} = ${v}.`,
+    choices, answer };
+});
+
+G('gs_unit_convert','GSR',0.7,'Multi-step unit conversion',()=>{
+  const type = pick(['glasses','tuna']);
+  if(type==='glasses'){
+    const qt=pick([2,3,4]), oz=pick([6,8,12]);
+    const totalOz = qt*4*8, v = Math.floor(totalOz/oz);
+    const {choices,answer} = mc(v, [v+1, v-1, Math.round(totalOz/oz*1.5), qt*4]);
+    return { stem:`Nora has a ${qt} quart container full of tea. How many ${oz} oz glasses can she COMPLETELY fill? (1 qt = 4 cups, 1 cup = 8 oz)`,
+      solution:`Convert step by step:<br>${qt} qt × 4 = ${qt*4} cups<br>${qt*4} cups × 8 = ${totalOz} oz<br>${totalOz} ÷ ${oz} = ${round2(totalOz/oz)} glasses<br>Only <em>completely</em> filled glasses count, so round down: <b>${v}</b>.`,
+      choices, answer };
+  }
+  const tons=pick([0.5,1,1.5,2]), v=Math.round(tons*2000*2.2);
+  const {choices,answer} = mc(v, [Math.round(tons*2000), Math.round(v/2), Math.round(tons*2000/2.2), v+200]);
+  return { stem:`Isabella caught a ${tons===0.5?'½':tons} ton tuna fish. A ton = 2000 lbs and 1 lb = 2.2 kg. How many kilograms did the tuna weigh?`,
+    solution:`${tons} ton × 2000 = ${tons*2000} lbs<br>${tons*2000} lbs × 2.2 = <b>${v} kg</b><br>Chain the conversions in order so the units cancel: tons → lbs → kg.`,
+    choices, answer };
+});
+
+G('gs_square_side','GSR',0.1,'Square area with a variable side',()=>{
+  const k=pick([10,5,4,2]), x=pick([2,3,4,5]), area=(k*x)*(k*x);
+  const {choices,answer} = mc(x, [k*x, area/k, Math.round(Math.sqrt(area)), x*2]);
+  return { stem:`For a square, if the length of one side is ${k}x and its area is ${area}, what is the value of <em>x</em>?`,
+    solution:`Area of a square = side².<br>(${k}x)² = ${area} → ${k*k}x² = ${area}<br>x² = ${area} ÷ ${k*k} = ${x*x}<br>x = <b>${x}</b><br>Careful: (${k}x)² squares <em>both</em> the ${k} and the x, giving ${k*k}x² — not ${k}x².`,
+    choices, answer };
+});
+
+G('gs_square_perim_area','GSR',-0.3,'Perimeter to area of a square',()=>{
+  const s=pick([15,20,25,30,40]), P=4*s, v=s*s;
+  const {choices,answer} = mc(v+' ft²', [(P*P)+' ft²', (P*s)+' ft²', (v/2)+' ft²', (4*s)+' ft²']);
+  return { stem:`A square room with a perimeter of ${P} feet has how many square feet of floor?`,
+    solution:`A square has 4 equal sides, so each side is ${P} ÷ 4 = ${s} feet.<br>Area = ${s} × ${s} = <b>${v} ft²</b><br>Squaring the perimeter instead of the side gives ${P*P}, which is the trap answer.`,
+    choices, answer };
+});
+
+G('gs_tile_minus','GSR',0.0,'Area with a region removed',()=>{
+  const L=pick([12,14,15,16]), W=pick([6,8,10]), sl=pick([9,8,6]), sw=pick([2,3]);
+  const v = L*W - sl*sw;
+  const {choices,answer} = mc(v+' ft²', [(L*W)+' ft²', (sl*sw)+' ft²', (L*W-sl)+' ft²', (2*(L+W))+' ft²']);
+  return { stem:`Mrs. Reyna-Amador needs tile flooring in her kitchen. Her kitchen is ${L} ft long and ${W} ft wide. No tile is needed where the sink and cabinets are (a ${sl} ft by ${sw} ft area). How many square feet of tile will she need to purchase?`,
+    solution:`Whole floor: ${L} × ${W} = ${L*W} ft²<br>Area not needing tile: ${sl} × ${sw} = ${sl*sw} ft²<br>Tile needed: ${L*W} − ${sl*sw} = <b>${v} ft²</b>`,
+    choices, answer };
+});
+
+G('gs_crop_remove','GSR',0.8,'Area removed when cropping',()=>{
+  const s=pick([12,10,14]), w=pick([8,6,9]), h=pick([10,8,12]);
+  const v = s*s - w*h;
+  if(v<=0) return BANK.find(g=>g.id==='gs_tile_minus').gen();
+  const {choices,answer} = mc(v, [w*h, s*s, s-w, (s-w)*(s-h)]);
+  return { stem:`A ${s} inch by ${s} inch image needs to be cropped to fit into a ${w} inch by ${h} inch space. How many square inches will need to be removed to make it fit?`,
+    solution:`Original area: ${s} × ${s} = ${s*s} in²<br>New area: ${w} × ${h} = ${w*h} in²<br>Removed: ${s*s} − ${w*h} = <b>${v} in²</b><br>${(s-w)*(s-h)} comes from subtracting the sides first and then multiplying, which does not give the removed area.`,
+    choices, answer };
+});
+
+G('gs_prop_resize','GSR',0.9,'Proportional resizing',()=>{
+  const w=pick([8,6,10]), h=pick([10,12,15]);
+  const nh=pick([12,18,20,24].filter(x=>x>h));
+  const v = round1(w*nh/h);
+  const {choices,answer} = mc(v+'cm', [nh+'cm', h+'cm', round1(w*h/nh)+'cm', round1(v-0.8)+'cm']);
+  return { stem:`An image that is ${w} cm wide by ${h} cm high will be stretched to fit into a space ${nh} cm wide by ${nh} cm high. If the image is stretched proportionally to fit the height, how wide will the enlarged image be?`,
+    solution:`Fitting the height means the scale factor is ${nh} ÷ ${h} = ${round2(nh/h)}.<br>Apply that same factor to the width: ${w} × ${round2(nh/h)} = <b>${v} cm</b><br>"Proportionally" means both dimensions use the <em>same</em> multiplier.`,
+    choices, answer };
+});
+
+/* ---------- PROBABILISTIC & STATISTICAL REASONING ---------- */
+
+G('ps_marbles','PSR',-1.0,'Simple probability',()=>{
+  let r,g,b; do { r=ri(2,6); g=ri(2,6); b=ri(2,6); } while(r===g && g===b);
+  const tot=r+g+b;
+  const v=frac(g,tot);
+  const {choices,answer} = mc(v, [frac(r,tot), frac(b,tot), frac(g,r+b), frac(tot-g,tot),
+                                  frac(g,tot-g), frac(r+b,tot)]);
+  return { stem:`In a bag of marbles there are ${r} red, ${g} green, and ${b} blue marbles. Which probability represents Audelio's chances of picking a green marble?`,
+    solution:`Probability = (what you want) ÷ (everything).<br>Green marbles: ${g}. Total marbles: ${r} + ${g} + ${b} = ${tot}.<br>${g}/${tot} = <b>${v}</b><br>The denominator is always the <em>total</em>, not the marbles that aren't green.`,
+    choices, answer };
+});
+
+G('ps_complement','PSR',-0.2,'Complement of an event',()=>{
+  const r=ri(2,5), g=ri(3,6), b=ri(2,5), tot=r+g+b;
+  const v=round2((r+b)/tot);
+  const {choices,answer} = mc(v, [round2(g/tot), round2(r/tot), round2(b/tot), round2(1-v)]);
+  return { stem:`In a bag of marbles there are ${r} red, ${g} green, and ${b} blue marbles. Which is closest to the probability of Nora picking a red OR blue marble (the same as NOT picking green)?`,
+    solution:`Red or blue = ${r} + ${b} = ${r+b} out of ${tot} marbles → ${r+b}/${tot} = <b>${v}</b><br>Or use the complement: P(not green) = 1 − P(green) = 1 − ${round2(g/tot)} = ${v}. Either route works.`,
+    choices, answer };
+});
+
+G('ps_independent','PSR',1.1,'Independent events',()=>{
+  const win=pick([40,20,60,30]), lose=100-win;
+  const n = lose*lose, d = 10000, g = gcd(n,d);
+  const v = frac(n,d);
+  const {choices,answer} = mc(v, [frac(win*win,d), frac(lose,100), frac(2*lose,100), frac(win,100)]);
+  return { stem:`If Mr. Stroop's chances of winning a game are ${win}%, what are his chances of losing twice in a row?`,
+    solution:`If he wins ${win}% of the time, he loses ${lose}% of the time → ${lose}/100.<br>"Twice in a row" means multiply, because the games are independent:<br>${lose}/100 × ${lose}/100 = ${n}/${d} = <b>${v}</b><br>Adding the two probabilities instead of multiplying is the usual mistake.`,
+    choices, answer };
+});
+
+G('ps_counting','PSR',-0.5,'Counting principle',()=>{
+  const a=pick([2,3]), b=pick([3,4]), c=pick([3,2,4]);
+  const v=a*b*c;
+  const {choices,answer} = mc(v, [a+b+c, a*b, b*c, v+a]);
+  return { stem:`Mrs. Stroop is making a sandwich. She has ${a} choices of bread, ${b} choices of cheese, and ${c} choices of protein. If she picks one of each, how many different combinations could she make?`,
+    solution:`With one pick from each category, multiply the number of options together:<br>${a} × ${b} × ${c} = <b>${v}</b><br>Adding them (${a+b+c}) counts single items, not combinations.`,
+    choices, answer };
+});
+
+G('ps_mean_missing','PSR',0.1,'Find a missing value from a mean',()=>{
+  const mean=pick([70,80,75,60]), n=5;
+  const four=[mean-10, mean, mean+10, mean+15];
+  const total=mean*n, v=total-four.reduce((a,c)=>a+c,0);
+  const {choices,answer} = mc(v, [mean, v+10, v-10, mean+5]);
+  return { stem:`The mean of 5 numbers is ${mean}. Four of the numbers are ${four.join(', ')}. What is the 5th number?`,
+    solution:`Work backwards from the mean. If the mean of 5 numbers is ${mean}, they must add to ${mean} × 5 = ${total}.<br>The four known numbers add to ${four.reduce((a,c)=>a+c,0)}.<br>5th number = ${total} − ${four.reduce((a,c)=>a+c,0)} = <b>${v}</b>`,
+    choices, answer };
+});
+
+G('ps_mean_total','PSR',0.5,'Total from a mean',()=>{
+  const mean=pick([70,80,65,90]), n=5, one=pick([55,45,50,60]);
+  const v=mean*n-one;
+  const {choices,answer} = mc(v, [mean*n, v-15, v+15, mean*4]);
+  return { stem:`The mean of 5 numbers is ${mean}, and one of the numbers is ${one}. What is the total of the other 4 numbers?`,
+    solution:`All 5 numbers add to ${mean} × 5 = ${mean*n}.<br>Take out the one you know: ${mean*n} − ${one} = <b>${v}</b><br>${mean*4} is the trap — that would be right only if all four remaining numbers happened to equal the mean.`,
+    choices, answer };
+});
+
+G('ps_mmr','PSR',-0.3,'Mean, median, or range',()=>{
+  const names=['Pecans','Pistachios','Cashews','Almonds','Peanuts'];
+  let prices,sorted,mean,median,range,tries=0;
+  do {
+    prices=[0.62,0.70,0.50,0.73,0.25].map(p=>round2(p+ri(-5,5)/100));
+    sorted=prices.slice().sort((a,b)=>a-b);
+    mean=round2(prices.reduce((a,c)=>a+c,0)/5); median=sorted[2]; range=round2(sorted[4]-sorted[0]);
+  } while(new Set([mean,median,range]).size<3 && ++tries<40);
+  const which=pick(['mean','median','range']);
+  const map={mean, median, range};
+  const v=money(map[which]);
+  const {choices,answer} = mc(v, [money(mean),money(median),money(range),money(sorted[4]),money(sorted[0])]);
+  return { stem:`The price per ounce of various nuts is: ${names.map((n,i)=>n+' '+money(prices[i])).join(', ')}. What is the <b>${which}</b> of these prices?`,
+    solution:`Sorted: ${sorted.map(money).join(', ')}<br>Mean (add and divide by 5): ${money(mean)}<br>Median (the middle one once sorted): ${money(median)}<br>Range (highest − lowest): ${money(sorted[4])} − ${money(sorted[0])} = ${money(range)}<br>The question asks for the <b>${which}</b>: <b>${v}</b>`,
+    choices, answer };
+});
+
+G('ps_median_cond','PSR',0.9,'Reason about a median',()=>{
+  const known=[31,50,75].sort((a,b)=>a-b), med=pick([65,71,68]);
+  const v = pick([80,85,90]);
+  const {choices,answer} = mc(v+' °F', [40+' °F', 60+' °F', (med-1)+' °F']);
+  return { stem:`On St. Patrick's Day, five Texas counties recorded these noon temperatures: Potter ${known[0]}°F, El Paso ${known[1]}°F, Harris ${known[2]}°F, Bexar ${med}°F, and Hidalgo <em>x</em>. If Bexar County had the median noon temperature, which of the following could have been Hidalgo County's temperature?`,
+    solution:`With 5 values, the median has exactly 2 values below it and 2 above it.<br>Below ${med}: ${known[0]} and ${known[1]} — that's already 2. ✓<br>Above ${med}: ${known[2]} — only 1 so far.<br>So Hidalgo must be the second value <em>above</em> ${med}. Only <b>${v}°F</b> is greater than ${med}.`,
+    choices, answer };
+});
+
+G('ps_range_missing','PSR',0.8,'Find a value that produces a range',()=>{
+  const base=[78,86,65,84,86,81,72];
+  const lo=Math.min(...base), hi=Math.max(...base), want=pick([31,28,35]);
+  const v = lo+want;
+  const {choices,answer} = mc(v, [lo-1, hi-want, want+hi, lo+want-10]);
+  return { stem:`Thane's grades this year were: ${base.join(', ')}, and <em>x</em>. Which value of <em>x</em> would give the set a range of ${want}?`,
+    solution:`Range = highest − lowest. Right now the grades run from ${lo} to ${hi}, a range of ${hi-lo}.<br>You need ${want}, which is bigger, so <em>x</em> has to become a new extreme.<br>As a new high: ${lo} + ${want} = <b>${v}</b> (since ${v} − ${lo} = ${want}) ✓<br>As a new low it would have to be ${hi-want}, which isn't offered here.`,
+    choices, answer };
+});
+
+G('ps_twoway','PSR',0.7,'Two-way frequency table',()=>{
+  const bL=ri(2,6), bR=ri(1,4), bG=ri(2,5), bS=ri(2,5);
+  const gL=ri(1,4), gR=ri(1,3), gG=ri(1,4), gS=ri(2,5);
+  const bT=bL+bR+bG+bS, gT=gL+gR+gG+gS;
+  const kind = pick(['givenVote','givenGender','total']);
+  let stemQ, v, why;
+  const tbl = tableHTML(['','Mr. L','Ms. R','Ms. G','Mr. S','Total'],
+    [['Boys',bL,bR,bG,bS,bT],['Girls',gL,gR,gG,gS,gT],['Total',bL+gL,bR+gR,bG+gG,bS+gS,bT+gT]]);
+  if(kind==='total'){
+    v = String(bT+gT);
+    stemQ = `According to the two-way frequency table, what is the total number of people surveyed?`;
+    why = `The bottom-right cell is the grand total: ${bT} boys + ${gT} girls = <b>${bT+gT}</b>. Adding only one row or only one column misses half the data.`;
+  } else if(kind==='givenVote'){
+    const pct = Math.round(gL/(bL+gL)*100);
+    v = pct+'%';
+    stemQ = `According to the table, what is the probability (to the nearest percent) that a vote for Mr. L came from a girl?`;
+    why = `"A vote for Mr. L" limits you to that <em>column</em>: ${bL+gL} votes total.<br>Of those, ${gL} came from girls.<br>${gL} ÷ ${bL+gL} = ${round2(gL/(bL+gL))} → <b>${pct}%</b><br>The phrase after "that a" tells you which total goes on the bottom.`;
+  } else {
+    const pct = Math.round(bG/bT*100);
+    v = pct+'%';
+    stemQ = `According to the table, what is the probability (to the nearest percent) that a boy voted for Ms. G?`;
+    why = `"A boy" limits you to the boys' <em>row</em>: ${bT} boys total.<br>Of those, ${bG} voted for Ms. G.<br>${bG} ÷ ${bT} = ${round2(bG/bT)} → <b>${pct}%</b>`;
+  }
+  const base = parseInt(v) || (bT+gT);
+  const {choices,answer} = mc(v, kind==='total'
+    ? [String(bT), String(gT), String(bL+gL+bR+gR)]
+    : [ (base+5)+'%', Math.max(1,base-5)+'%', (base*2)+'%', Math.round(base/2)+'%' ]);
+  return { figure:tbl, stem:stemQ, solution:why, choices, answer };
+});
+
+G('ps_bar_diff','PSR',-0.8,'Read a bar chart',()=>{
+  const labels=pick([['Mon','Tue','Wed','Thu','Fri'],['Rm A','Rm B','Rm C','Rm D','Rm E']]);
+  const vals=labels.map(()=>ri(3,20));
+  const v=Math.max(...vals)-Math.min(...vals);
+  if(v<3) vals[0]=Math.max(...vals)+5;
+  const vv=Math.max(...vals)-Math.min(...vals);
+  const {choices,answer} = mc(vv, near(vv,2,-2,4,-3,5));
+  return { figure:svgBar(labels, vals, labels[0]==='Mon'?'Miles Run':'Tickets Sold'),
+    stem:`According to the bar chart, what is the difference between the highest and lowest values shown?`,
+    solution:`Read the tallest bar and the shortest bar off the vertical axis.<br>Highest: ${Math.max(...vals)}. Lowest: ${Math.min(...vals)}.<br>Difference: ${Math.max(...vals)} − ${Math.min(...vals)} = <b>${vv}</b>`,
+    choices, answer };
+});
+
+G('ps_pie_count','PSR',-0.4,'Read a circle graph',()=>{
+  const n=pick([200,400,500,800]);
+  const savings=pick([10,15,20,25,35]);
+  const rest=100-savings, rent=Math.round(rest*0.45), food=Math.round(rest*0.35), other=100-savings-rent-food;
+  const v=Math.round(n*savings/100);
+  const {choices,answer} = mc(v, near(v, 1, -16, 20, -20));
+  return { figure:svgPie([{label:'Savings',pct:savings},{label:'Rent',pct:rent},{label:'Food',pct:food},{label:'Other',pct:other}]),
+    stem:`A survey of ${n} people is shown in the circle graph. How many people chose "Savings"?`,
+    solution:`The slice is ${savings}% of the whole survey.<br>${savings}% of ${n} = 0.${String(savings).padStart(2,'0')} × ${n} = <b>${v} people</b><br>Percent alone isn't the answer — you have to apply it to the ${n} people surveyed.`,
+    choices, answer };
+});
+
+G('ps_dotplot','PSR',-0.9,'Mode from a dot plot',()=>{
+  const counts={}; const mode=ri(1,7);
+  for(let k=1;k<=7;k++) counts[k]= k===mode ? ri(3,4) : ri(0,2);
+  const v=String(mode);
+  const {choices,answer} = mc(v, [String(counts[mode]), String((mode%7)+1), '0', String(Math.max(1,mode-2))]);
+  return { figure:svgDot(counts),
+    stem:`What is the mode of the data set shown in the dot plot?`,
+    solution:`The mode is the <em>value</em> that appears most often — the column with the most dots.<br>The tallest stack sits above ${mode}, with ${counts[mode]} dots.<br>The mode is <b>${mode}</b>, not ${counts[mode]}. The answer is the number on the axis, not how many dots are there.`,
+    choices, answer };
+});
+
+G('ps_freq_median','PSR',1.0,'Median from a frequency table',()=>{
+  const sizes=[16,24,32,44], f=[ri(8,20), ri(45,70), ri(30,50), ri(25,45)];
+  const total=f.reduce((a,c)=>a+c,0);
+  const midA=Math.ceil(total/2);
+  let cum=0, med=sizes[0];
+  for(let i=0;i<4;i++){ cum+=f[i]; if(cum>=midA){ med=sizes[i]; break; } }
+  const mode=sizes[f.indexOf(Math.max(...f))];
+  const askMode = rnd()<0.4;
+  const v = String(askMode?mode:med);
+  const {choices,answer} = mc(v, sizes.map(String));
+  return { figure:tableHTML(['Size of cup (oz)','# of cups sold'], sizes.map((s,i)=>[s,f[i]])),
+    stem:`Sales for one day at a corner store are shown. What size cup was the <b>${askMode?'mode':'median'}</b> size sold?`,
+    solution: askMode
+      ? `The mode is the size sold most often. The largest frequency is ${Math.max(...f)}, next to <b>${mode} oz</b>.`
+      : `Don't take the middle of the size column — you have to account for how many cups of each size were sold.<br>Total cups: ${f.join(' + ')} = ${total}. The median is the ${midA}th cup.<br>Running totals: ${sizes.map((s,i)=>`${s} oz → ${f.slice(0,i+1).reduce((a,c)=>a+c,0)}`).join(', ')}<br>The ${midA}th cup lands in the <b>${med} oz</b> group.`,
+    choices, answer };
+});
+
+/* ================================================================
+   §5  ADAPTIVE ENGINE
+   ----------------------------------------------------------------
+   A simplified 1-parameter (Rasch) adaptive routine:
+
+     P(correct) = 1 / (1 + e^(-1.7(theta - b)))
+
+   After each response, theta moves by K(theta_step) x (observed -
+   expected). Getting a hard item right moves theta a lot; getting an
+   easy item right barely moves it, which is exactly the behavior that
+   makes an adaptive test shorter than a fixed one. K shrinks as the
+   test goes on so the estimate settles.
+
+   The blueprint constrains WHICH strand comes next; the ability
+   estimate constrains HOW HARD the item is inside that strand. That
+   mirrors the real CRC: it is adaptive, but it still has to cover all
+   four content strands.
+   ================================================================ */
+
+const D = 1.7;
+const pCorrect = (theta,b) => 1/(1+Math.exp(-D*(theta-b)));
+
+function newSession(){
+  const remaining = Object.assign({}, CONFIG.blueprint);
+  return { theta:0, n:0, items:[], used:new Set(), remaining, history:[] };
+}
+
+/* Choose the next strand: weighted by how much of each quota is left,
+   so strands stay interleaved instead of clumping. */
+function nextStrand(S){
+  const avail = Object.keys(S.remaining).filter(k=>S.remaining[k]>0);
+  if(!avail.length) return null;
+  const total = avail.reduce((a,k)=>a+S.remaining[k],0);
+  let r = rnd()*total;
+  for(const k of avail){ r -= S.remaining[k]; if(r<=0) return k; }
+  return avail[avail.length-1];
+}
+
+/* Choose the item: closest difficulty to the current ability estimate.
+   Randomize among the 3 nearest so two students with identical answer
+   patterns don't get a byte-identical test. */
+function nextItem(S, strand){
+  let pool = BANK.filter(g => g.strand===strand && !S.used.has(g.id));
+  if(!pool.length) pool = BANK.filter(g => g.strand===strand);
+  pool = pool.slice().sort((a,b)=>Math.abs(a.b-S.theta)-Math.abs(b.b-S.theta));
+  return pick(pool.slice(0, Math.min(3,pool.length)));
+}
+
+function updateTheta(S, gen, correct){
+  const expected = pCorrect(S.theta, gen.b);
+  const K = 4/(S.n+3);
+  S.theta += K*((correct?1:0) - expected);
+  S.theta = Math.max(-3, Math.min(3, S.theta));
+}
+
+/* ================================================================
+   §6  SCORING
+   ================================================================ */
+
+function scaleScore(theta){
+  const t = Math.max(-CONFIG.thetaSpan, Math.min(CONFIG.thetaSpan, theta));
+  const half = (CONFIG.scoreMax - CONFIG.scoreMin)/2;
+  return Math.round(CONFIG.scoreCut + (t - CONFIG.thetaAtCut)/CONFIG.thetaSpan * half);
+}
+
+/* Strand index: each item contributes its own difficulty, shifted up
+   if answered correctly and down if not. Averaging gives a rough
+   "hardest level this student holds up at" for that strand. */
+function strandSummary(history){
+  const out = {};
+  for(const key of Object.keys(STRANDS)){
+    const its = history.filter(h=>h.strand===key);
+    const n = its.length, right = its.filter(h=>h.correct).length;
+    const idx = n ? its.reduce((a,h)=>a + h.b + (h.correct?0.5:-0.5), 0)/n : 0;
+    const band = idx >= CONFIG.bandAdvanced ? 'Advanced'
+               : idx >= CONFIG.bandProficient ? 'Proficient' : 'Basic';
+    const skills = {};
+    its.forEach(h=>{ (skills[h.skill] = skills[h.skill] || {n:0,ok:0}); skills[h.skill].n++; if(h.correct) skills[h.skill].ok++; });
+    out[key] = { n, right, idx, band,
+      pct: n ? Math.round(right/n*100) : 0,
+      fill: Math.max(4, Math.min(100, Math.round((idx + 2)/4*100))),
+      weak: Object.keys(skills).filter(s=>skills[s].ok < skills[s].n) };
+  }
+  return out;
+}
+
+/* ================================================================
+   §8  PORTAL INTEGRATION  (portal-tsi.js / window.TSIPortal)
+   ----------------------------------------------------------------
+   VERIFIED against portal-tsi.js:
+     TSIPortal.record(skillId, correct, {level: n})
+     TSIPortal.skill(id) / .studentId() / .studentName() / .mode()
+   Note it is window.TSIPortal, NOT window.Portal — the TSI portal was
+   forked under its own global so a combined teacher page can load both
+   it and the Algebra 1 portal.js without colliding.
+
+   WHY THIS DOES NOT RECORD AGAINST AR.1 / QR.3 / GSR.4 / ...
+   ----------------------------------------------------------------
+   It is tempting to map each test item onto its registry standard so
+   the test "feeds the hub". That would quietly wreck the mastery model.
+
+   computeStats() marks a standard polished at >=15 attempts AND >=80%
+   accuracy over the LAST TEN answers, and record() keeps only the last
+   20 answers in s.h. An adaptive test deliberately serves items the
+   student has roughly a coin-flip chance on — that is the whole point of
+   targeting difficulty to ability. So a single 20-question test would
+   overwrite most of the recent-answer window for whichever standards it
+   touched, with results engineered to sit near 50%. A student who had
+   polished AR.1 through honest practice would come out of one practice
+   test un-polished, through no fault of their own.
+
+   So CRC results live in their own namespace, CRC.*, which is not in
+   REGISTRY. Because summary(), totals(), nextOnPath() and the hub's
+   section rings all iterate REGISTRY, these entries cannot contaminate
+   any of them. They DO ride along in reportCode() (which walks every key
+   in d.skills) and in the Apps Script sync, so nothing is lost.
+   ================================================================ */
+
+const PortalLink = {
+  ids: { AR:'CRC.AR', QR:'CRC.QR', PSR:'CRC.PSR', GSR:'CRC.GSR' },
+  whole: 'CRC.TEST',
+
+  get on(){ return !!(window.TSIPortal && typeof window.TSIPortal.record === 'function'); },
+
+  /* one call per item, tagged by strand only */
+  attempt(strandKey, correct){
+    if(!this.on) return;
+    try { window.TSIPortal.record(this.ids[strandKey], !!correct, { level: 1 }); }
+    catch(e){ console.warn('[tsi-crc] TSIPortal.record failed', e); }
+  },
+
+  /* Two writes per completed test:
+       1. record() on CRC.TEST — attempts = tests taken, correct = tests at
+          or above the cut. Gives the report a running pass rate.
+       2. logTest() — the full per-attempt entry, so the report can show the
+          score trend and per-strand history across every retake. */
+  finish(result){
+    if(!this.on) return;
+    try {
+      const band = Math.max(1, Math.min(5, Math.round((result.score - 910)/20) + 1));
+      window.TSIPortal.record(this.whole, !!result.ready, { level: band });
+    } catch(e){ console.warn('[tsi-crc] TSIPortal.record failed', e); }
+    try {
+      if(typeof window.TSIPortal.logTest === 'function'){
+        window.TSIPortal.logTest({
+          t: Date.now(), code: result.code, score: result.score, ready: result.ready,
+          right: result.right, n: result.total, mode: result.mode, s: result.strandPairs
+        });
+      } else {
+        console.warn('[tsi-crc] portal-tsi.js has no logTest() — update it to keep test history.');
+      }
+    } catch(e){ console.warn('[tsi-crc] TSIPortal.logTest failed', e); }
+  },
+
+  who(){
+    if(!this.on) return null;
+    try {
+      const id = window.TSIPortal.studentId(), name = window.TSIPortal.studentName();
+      if(!id && !name) return null;
+      return { id, name, mode: window.TSIPortal.mode() };
+    } catch(e){ return null; }
+  }
+};
+
+/* Local fallback so a result survives a refresh even with no portal. */
+const LOCAL_KEY = 'tsi-crc-last';
+function saveLocal(obj){
+  try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(obj)); }catch(e){}
+}
+
+/* ================================================================
+   §7  UI
+   ================================================================ */
+
+const $ = id => document.getElementById(id);
+const el = { intro:$('intro'), test:$('test'), results:$('results') };
+
+let S = null, MODE = 'test', current = null, selected = null, locked = false, SEED = 0;
+
+/* ---- intro ---- */
+(function initIntro(){
+  $('blueprintChips').innerHTML = Object.keys(CONFIG.blueprint).map(k=>{
+    const s = STRANDS[k];
+    return `<span class="chip"><i class="dot ${s.cls}"></i><b style="font-family:var(--f-display)">${CONFIG.blueprint[k]}</b>&nbsp;${esc(s.name)}</span>`;
+  }).join('');
+
+  $('modeTest').onclick = () => setMode('test');
+  $('modePractice').onclick = () => setMode('practice');
+  function setMode(m){
+    MODE = m;
+    $('modeTest').setAttribute('aria-pressed', m==='test');
+    $('modePractice').setAttribute('aria-pressed', m==='practice');
+    $('modeDesc').textContent = m==='test'
+      ? 'Test mode: no feedback until the end. Closest to the real thing.'
+      : 'Practice mode: you see whether you were right, and why, after every question.';
+  }
+
+  $('startBtn').onclick = start;
+})();
+
+function start(){
+  const typed = codeToSeed($('seedIn').value);
+  /* 6 base-32 chars holds 32^6 = 2^30, so seeds must stay under that to
+     survive the round trip through a shareable test code. */
+  SEED = typed !== null ? typed : (Math.floor(Math.random()*1073741824) >>> 0);
+  RNG = makeRng(SEED);
+
+  S = newSession();
+  el.intro.classList.add('hidden');
+  el.results.classList.add('hidden');
+  el.test.classList.remove('hidden');
+
+  $('ticks').innerHTML = Array.from({length:CONFIG.testLength}, ()=>'<i class="tick"></i>').join('');
+  serve();
+  window.scrollTo(0,0);
+}
+
+function serve(){
+  const strand = nextStrand(S);
+  if(strand === null || S.n >= CONFIG.testLength) return finish();
+
+  const gen = nextItem(S, strand);
+  S.used.add(gen.id);
+  S.remaining[strand]--;
+
+  let item;
+  try { item = gen.gen(); }
+  catch(e){ console.error('[tsi-crc] generator failed:', gen.id, e); S.remaining[strand]++; return serve(); }
+
+  current = { gen, item };
+  selected = null; locked = false;
+
+  $('qNum').textContent = S.n + 1;
+  $('strandLabel').textContent = STRANDS[strand].name;
+  $('strandLabel').style.color = STRANDS[strand].color;
+  $('figure').innerHTML = item.figure || '';
+  $('figure').style.display = item.figure ? 'block' : 'none';
+  $('stem').innerHTML = item.stem;
+  $('feedback').innerHTML = '';
+
+  $('choices').innerHTML = item.choices.map((c,i)=>
+    `<button class="choice" data-i="${i}"><span class="lab">${'ABCD'[i]}</span><span>${c}</span></button>`
+  ).join('');
+  Array.from($('choices').children).forEach(btn=>{
+    btn.onclick = () => {
+      if(locked) return;
+      selected = Number(btn.dataset.i);
+      Array.from($('choices').children).forEach(b=>b.classList.toggle('sel', b===btn));
+      $('nextBtn').disabled = false;
+    };
+  });
+
+  $('nextBtn').disabled = true;
+  $('nextBtn').textContent = 'Submit answer';
+  $('nextBtn').onclick = submit;
+
+  const ticks = $('ticks').children;
+  for(let i=0;i<ticks.length;i++){
+    ticks[i].className = 'tick' + (i < S.n ? ' done' : i === S.n ? ' now' : '');
+  }
+}
+
+function submit(){
+  if(selected === null || locked) return;
+  locked = true;
+
+  const { gen, item } = current;
+  const chosen  = item.choices[selected];
+  const correct = chosen === item.answer;
+
+  S.history.push({ id:gen.id, strand:gen.strand, skill:gen.skill, b:gen.b,
+                   correct, stem:item.stem, figure:item.figure||'',
+                   chosen, answer:item.answer, solution:item.solution });
+  updateTheta(S, gen, correct);
+  S.n++;
+  PortalLink.attempt(gen.strand, correct);
+
+  if(MODE === 'practice'){
+    const kids = $('choices').children;
+    for(let i=0;i<kids.length;i++){
+      kids[i].disabled = true;
+      if(item.choices[i] === item.answer) kids[i].classList.add('correct');
+      else if(i === selected) kids[i].classList.add('wrong');
+      kids[i].classList.remove('sel');
+    }
+    $('feedback').innerHTML =
+      `<div class="feedback ${correct?'fb-ok':'fb-no'}">
+         <b>${correct ? 'Correct.' : 'Not quite — the answer is ' + item.answer + '.'}</b><br>${item.solution}
+       </div>`;
+    $('nextBtn').textContent = S.n >= CONFIG.testLength ? 'See my results' : 'Next question';
+    $('nextBtn').disabled = false;
+    $('nextBtn').onclick = serve;
+    $('feedback').scrollIntoView({behavior:'smooth', block:'nearest'});
+  } else {
+    serve();
+  }
+}
+
+/* ---- results ---- */
+function finish(){
+  el.test.classList.add('hidden');
+  el.results.classList.remove('hidden');
+  window.scrollTo(0,0);
+
+  const score  = scaleScore(S.theta);
+  const ready  = score >= CONFIG.scoreCut;
+  const right  = S.history.filter(h=>h.correct).length;
+  const strands = strandSummary(S.history);
+
+  $('scoreBig').textContent = score;
+  $('verdict').textContent  = ready ? 'On track for college ready' : 'Not yet at the college-ready cut';
+  $('verdict').className    = 'verdict ' + (ready ? 'v-ready' : 'v-not');
+
+  const cutPct = (CONFIG.scoreCut - CONFIG.scoreMin)/(CONFIG.scoreMax - CONFIG.scoreMin)*100;
+  $('railCut').style.left = cutPct + '%';
+  const fill = $('railFill');
+  fill.classList.toggle('ready', ready);
+  requestAnimationFrame(()=>{ setTimeout(()=>{
+    fill.style.width = ((score - CONFIG.scoreMin)/(CONFIG.scoreMax - CONFIG.scoreMin)*100) + '%';
+  }, 120); });
+
+  $('scoreNote').innerHTML =
+    `You answered <b>${right} of ${CONFIG.testLength}</b> correctly. On an adaptive test the raw count matters
+     less than <em>which</em> questions you got right — a hard question right is worth more than an easy one.
+     This is a practice estimate built from difficulty ratings written by hand, not the official calibrated
+     scale, so treat it as a direction, not a prediction. The real cut is a score of
+     ${CONFIG.scoreCut}; below that, the actual test routes you to a 48-question diagnostic where a Level 6
+     also counts as college ready.`;
+
+  /* strand cards */
+  $('strandCards').innerHTML = Object.keys(STRANDS).map(k=>{
+    const s = STRANDS[k], r = strands[k];
+    const bandCls = r.band==='Advanced'?'b-adv':r.band==='Proficient'?'b-pro':'b-bas';
+    const weak = r.weak.length ? `Missed: ${r.weak.map(esc).join(', ')}` : 'Nothing missed in this strand';
+    return `<div class="strand">
+      <div class="strand-top">
+        <span class="strand-name"><i class="dot ${s.cls}"></i>${esc(s.name)}</span>
+        <span class="band ${bandCls}">${r.band}</span>
+      </div>
+      <div class="sbar"><i style="background:${s.color}" data-fill="${r.fill}"></i></div>
+      <div class="strand-meta">
+        <span class="mono">${r.right}/${r.n} correct</span>
+        <span>${esc(weak)}</span>
+      </div>
+    </div>`;
+  }).join('') + `<p class="note" style="margin-top:16px">
+      A strand judged on ${Math.min(...Object.values(CONFIG.blueprint))} questions cannot tell you much on its own. Use these bands
+      to pick what to practice next, not to conclude anything final about a student. The official test uses a
+      48-question diagnostic — 12 per strand — precisely because ${Math.min(...Object.values(CONFIG.blueprint))}&ndash;${Math.max(...Object.values(CONFIG.blueprint))} items is too few to classify on.
+    </p>`;
+  requestAnimationFrame(()=>{ setTimeout(()=>{
+    document.querySelectorAll('.sbar > i').forEach(i=>{ i.style.width = i.dataset.fill + '%'; });
+  }, 200); });
+
+  /* review */
+  $('reviewList').innerHTML = S.history.map((h,i)=>`
+    <div class="rev">
+      <div class="rev-top">
+        <span class="mark ${h.correct?'m-ok':'m-no'}">${h.correct?'✓':'✗'}</span>
+        <span class="eyebrow" style="color:${STRANDS[h.strand].color}">${i+1}. ${esc(STRANDS[h.strand].name)} &middot; ${esc(h.skill)}</span>
+      </div>
+      ${h.figure?`<div class="figure">${h.figure}</div>`:''}
+      <div class="small">${h.stem}</div>
+      <div class="small" style="margin-top:8px">
+        Your answer: <b style="color:${h.correct?'var(--check)':'var(--pen)'}">${h.chosen}</b>
+        ${h.correct?'':` &nbsp;·&nbsp; Correct answer: <b style="color:var(--check)">${h.answer}</b>`}
+      </div>
+      <details ${h.correct?'':'open'}><summary>How to do it</summary><div class="sol">${h.solution}</div></details>
+    </div>`).join('');
+
+  /* meta + codes */
+  const resultCode = `${seedToCode(SEED)} ${score} ${right}/${CONFIG.testLength} ` +
+    Object.keys(STRANDS).map(k=>`${k}:${strands[k].right}/${strands[k].n}`).join(' ');
+  const who = PortalLink.who();
+  $('metaList').innerHTML = `
+    ${who && who.name ? `<dt>Student</dt><dd>${esc(who.name)}${who.id?' · '+esc(who.id):''}</dd>` : ''}
+    <dt>Test code</dt><dd>${seedToCode(SEED)}</dd>
+    <dt>Estimated score</dt><dd>${score}</dd>
+    <dt>Raw correct</dt><dd>${right}/${CONFIG.testLength}</dd>
+    <dt>Ability estimate</dt><dd>&theta; = ${round2(S.theta)}</dd>
+    <dt>Mode</dt><dd>${MODE}</dd>
+    <dt>Portal sync</dt><dd>${PortalLink.on ? (who ? 'saved to ' + (who.id || who.mode) : 'guest — not saved') : 'standalone'}</dd>`;
+  $('seedOut').textContent = resultCode;
+
+  $('copyBtn').onclick = () => {
+    navigator.clipboard.writeText(resultCode).then(
+      ()=>{ $('copyBtn').textContent = 'Copied'; setTimeout(()=>$('copyBtn').textContent='Copy result code', 1600); },
+      ()=>{ $('copyBtn').textContent = 'Select the code above'; }
+    );
+  };
+  $('printBtn').onclick = () => window.print();
+  $('againBtn').onclick = () => {
+    el.results.classList.add('hidden');
+    el.intro.classList.remove('hidden');
+    $('seedIn').value = '';
+    fill.style.width = '0';
+    window.scrollTo(0,0);
+  };
+
+  /* compact [correct, seen] per strand — what the hub report reads back */
+  const strandPairs = {};
+  Object.keys(STRANDS).forEach(k => { strandPairs[k] = [strands[k].right, strands[k].n]; });
+
+  const payload = { code:seedToCode(SEED), score, ready, right, total:CONFIG.testLength,
+                    theta:round2(S.theta), strands, strandPairs, mode:MODE,
+                    at:new Date().toISOString() };
+  saveLocal(payload);
+  PortalLink.finish(payload);
+}
+
+/* expose a little for console debugging / teacher tooling */
+window.TSICRC = { BANK, CONFIG, STRANDS, seedToCode, codeToSeed,
+                  session:()=>S, bankSize:()=>BANK.length };
+
+})();
+</script>
+</body>
+</html>
