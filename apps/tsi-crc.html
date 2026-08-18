@@ -56,7 +56,7 @@ body{
   line-height:1.5;
   -webkit-text-size-adjust:100%;
 }
-.wrap{max-width:820px;margin:0 auto;padding:20px 16px 80px}
+.wrap{max-width:820px;margin:0 auto;padding:20px 16px 110px}
 
 h1,h2,h3{font-family:var(--f-display);margin:0;letter-spacing:-.015em}
 h1{font-size:clamp(26px,5.2vw,38px);font-weight:700;line-height:1.08}
@@ -221,7 +221,66 @@ table.dt td.mono,table.dt th.mono{font-family:var(--f-mono)}
 .f-eq{font-family:var(--f-mono);font-size:1.02em}
 sup{font-size:.72em}
 
+/* ============================================================
+   CALCULATOR
+   tsi-calculator.js builds .calcToggle / .calcPanel and expects a
+   stylesheet to dress them. The modules get that from tsi-theme.css;
+   this page doesn't load the theme, so the same class names are
+   restyled here in this page's own tokens. Class names must match
+   tsi-calculator.js exactly — do not rename them.
+   ============================================================ */
+.calcToggle{
+  position:fixed; right:20px; bottom:20px; z-index:1550;
+  width:56px; height:56px; border-radius:50%; border:0;
+  background:var(--blue); color:#fff;
+  box-shadow:0 8px 22px -6px rgba(20,38,58,.5);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.calcToggle svg{width:26px; height:26px}
+.calcToggle:active{transform:translateY(1px)}
+.calcToggle.active{background:#24488a}
+.calcPanel{
+  position:fixed; right:20px; bottom:88px; z-index:1550;
+  width:250px; max-width:calc(100vw - 40px);
+  background:var(--paper-2); border:1px solid var(--rule); border-radius:var(--r);
+  box-shadow:0 20px 50px -12px rgba(20,38,58,.45);
+  display:none; overflow:hidden;
+}
+.calcPanel.show{display:block}
+.calcHead{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px; background:var(--paper); border-bottom:1px solid var(--rule);
+}
+.calcHead b{font-family:var(--f-display); font-size:12px; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft)}
+.calcCloseBtn{border:0; background:transparent; color:var(--ink-faint); font-size:19px;
+  line-height:1; cursor:pointer; padding:2px 4px; font-family:inherit}
+.calcCloseBtn:hover{color:var(--ink)}
+.calcDisplayWrap{padding:10px 14px 4px; background:var(--ink)}
+.calcIndicators{display:flex; gap:10px; padding-bottom:4px; justify-content:flex-end}
+.calcIndicators span{font-family:var(--f-mono); font-size:10px; font-weight:700;
+  letter-spacing:.08em; color:#435F55}
+.calcIndicators span.on{color:#8FD9B6}
+.calcDisplay{
+  font-family:var(--f-mono); font-weight:700; font-size:25px; line-height:1.2;
+  color:#CFEBDD; text-align:right; letter-spacing:.5px;
+  min-height:30px; overflow:hidden; white-space:nowrap;
+}
+.calcGrid{display:grid; grid-template-columns:repeat(4,1fr); gap:7px; padding:12px}
+.calcBtn{
+  height:42px; border-radius:var(--r); border:1px solid var(--rule); background:var(--paper);
+  font-family:var(--f-display); font-weight:600; font-size:15px; color:var(--ink); cursor:pointer;
+}
+.calcBtn:hover{background:var(--blue-soft); border-color:var(--blue)}
+.calcBtn:active{transform:translateY(1px)}
+.calcBtn.op{background:var(--blue-soft); color:var(--blue); border-color:#C6D6EE}
+.calcBtn.ctrl{background:#FCEDF0; color:var(--pen); border-color:#F0CBD3; font-size:12px}
+.calcBtn.eq{background:var(--blue); color:#fff; border-color:var(--blue)}
+.calcBtn.eq:hover{background:#24488a}
+
 @media (max-width:520px){
+  .calcPanel{right:12px; bottom:78px; width:224px}
+  .calcToggle{right:14px; bottom:14px; width:50px; height:50px}
   .card{padding:16px}
   .stem{font-size:16px}
   .choice{font-size:15px;padding:12px}
@@ -237,8 +296,12 @@ sup{font-size:.72em}
 </style>
 </head>
 <body>
-<!-- Same relative path the other modules use: this file lives in apps/ -->
+<!-- Same relative paths the other modules use: this file lives in apps/ -->
 <script src="../portal-tsi.js"></script>
+<!-- tsi-calculator.js self-mounts on DOMContentLoaded: it appends its own
+     toggle button and panel to <body> and needs no container. It carries no
+     styling of its own, so this page restyles it below (see CALCULATOR). -->
+<script src="../tsi-calculator.js"></script>
 <div class="wrap">
 
 <!-- ==================== INTRO ==================== -->
