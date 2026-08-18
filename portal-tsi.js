@@ -174,7 +174,7 @@
     catch (e) { return false; }
   })();
 
-  function blank() { return { v: 1, student: { name: '', code: '' }, skills: {}, sessions: {} }; }
+  function blank() { return { v: 1, student: { name: '', code: '' }, skills: {}, sessions: {}, tests: [] }; }
   function hasValidCode(d) { return !!(d && d.student && ID_RE.test(d.student.code || '')); }
 
   function currentMode() {
@@ -239,6 +239,73 @@
     save(d);
     schedulePush();
     return computeStats(s);
+  }
+
+  /* ================================================================== */
+  /*  PRACTICE-TEST LOG                                                  */
+  /*  ----------------------------------------------------------------  */
+  /*  One entry per COMPLETED adaptive CRC practice test. Deliberately   */
+  /*  not a skill: skills feed computeStats()/mastery, and a test that   */
+  /*  targets ~50% difficulty would wreck that. This is a plain history  */
+  /*  list, so it can only ever be read, never rolled up into a          */
+  /*  standard's progress.                                               */
+  /*                                                                     */
+  /*  It lives inside the same `d` blob every other write uses, so it    */
+  /*  rides along to the spreadsheet through the existing sync with no   */
+  /*  server-side change. Capped at MAX_TESTS to keep the blob small.    */
+  /*                                                                     */
+  /*  Entry shape (written by apps/tsi-crc.html):                        */
+  /*    { t, code, score, ready, right, n, mode, s:{AR:[c,n], QR:[c,n],  */
+  /*      PSR:[c,n], GSR:[c,n]} }                                        */
+  /* ================================================================== */
+  var MAX_TESTS = 40;
+
+  function logTest(entry) {
+    if (!entry) return [];
+    var d = load();
+    var log = d.tests || (d.tests = []);
+    log.push(entry);
+    if (log.length > MAX_TESTS) log.splice(0, log.length - MAX_TESTS);
+    save(d);
+    schedulePush();
+    return log.slice();
+  }
+
+  function testLog() {
+    var d = load();
+    return (d.tests || []).slice();
+  }
+
+  /* Roll-up over the whole log, for the hub report. */
+  function testSummary() {
+    var log = testLog();
+    if (!log.length) return { count: 0 };
+    var scores = log.map(function (e) { return e.score; });
+    var last = log[log.length - 1];
+    var strands = {};
+    log.forEach(function (e) {
+      var st = e.s || {};
+      Object.keys(st).forEach(function (k) {
+        var v = strands[k] || (strands[k] = { c: 0, n: 0 });
+        v.c += (st[k][0] || 0); v.n += (st[k][1] || 0);
+      });
+    });
+    var weakest = null;
+    Object.keys(strands).forEach(function (k) {
+      if (!strands[k].n) return;
+      var acc = strands[k].c / strands[k].n;
+      if (!weakest || acc < weakest.acc) weakest = { key: k, acc: acc };
+    });
+    return {
+      count: log.length,
+      best: Math.max.apply(null, scores),
+      latest: last.score,
+      first: scores[0],
+      passed: log.filter(function (e) { return e.ready; }).length,
+      gain: last.score - scores[0],
+      strands: strands,
+      weakest: weakest
+    };
   }
 
   function hint(skillId) {
@@ -518,6 +585,12 @@
     load: load,
     record: record,
     hint: hint,
+
+    /* practice-test history (see PRACTICE-TEST LOG above) */
+    logTest: logTest,
+    testLog: testLog,
+    testSummary: testSummary,
+
     skill: skill,
     summary: summary,
     totals: totals,
