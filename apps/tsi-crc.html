@@ -296,11 +296,13 @@ sup{font-size:.72em}
 </style>
 </head>
 <body>
-<!-- Same relative paths the other modules use: this file lives in apps/ -->
+<!-- Same relative paths the other modules use: this file lives in apps/,
+     with portal-tsi.js and tsi-calculator.js one level up in the site root. -->
 <script src="../portal-tsi.js"></script>
 <!-- tsi-calculator.js self-mounts on DOMContentLoaded: it appends its own
-     toggle button and panel to <body> and needs no container. It carries no
-     styling of its own, so this page restyles it below (see CALCULATOR). -->
+     toggle button and panel to <body> and needs no container. It ships no
+     styling, so this page restyles its classes in its own tokens (see
+     CALCULATOR in the stylesheet above). -->
 <script src="../tsi-calculator.js"></script>
 <div class="wrap">
 
@@ -335,9 +337,23 @@ sup{font-size:.72em}
     </p>
   </div>
 
+  <div class="card hidden" id="resumeCard">
+    <p class="eyebrow" style="margin:0 0 8px;color:var(--amber)">Unfinished test</p>
+    <p style="margin:0 0 4px">You stopped after question <b id="resumeN"></b> of 20.</p>
+    <p class="small muted" id="resumeWhen" style="margin:0"></p>
+    <div class="actions" style="justify-content:flex-start;margin-top:16px">
+      <button class="btn" id="resumeBtn">Pick up where I left off</button>
+      <button class="btn btn-ghost btn-sm" id="discardBtn">Discard and start over</button>
+    </div>
+  </div>
+
   <div class="actions" style="justify-content:flex-start">
     <button class="btn" id="startBtn">Start the 20 questions</button>
   </div>
+  <p class="small muted hidden" id="guestNote" style="margin:10px 0 0">
+    You're working as a guest. Sign in with your student ID on the hub if you want
+    to be able to stop partway and finish later.
+  </p>
 
   <details style="margin-top:26px">
     <summary class="small" style="cursor:pointer;color:var(--blue)">Use a specific test code (teachers)</summary>
@@ -365,7 +381,26 @@ sup{font-size:.72em}
     <div class="choices" id="choices"></div>
     <div id="feedback"></div>
     <div class="actions">
+      <button class="btn btn-ghost btn-sm hidden" id="pauseBtn" style="margin-right:auto">Save &amp; finish later</button>
       <button class="btn" id="nextBtn" disabled>Submit answer</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PAUSED ==================== -->
+<section id="paused" class="hidden">
+  <p class="eyebrow">Saved</p>
+  <h1 style="margin-top:6px">Your test is waiting for you</h1>
+  <div class="card" style="margin-top:18px">
+    <p style="margin:0 0 6px">You've answered <b id="pausedN"></b> of 20 questions.</p>
+    <p class="small muted" style="margin:0">
+      Nothing is lost. Open the practice test again on any computer where you're
+      signed in with your student ID, and it will start at the next question with
+      your answers still counted.
+    </p>
+    <div class="actions" style="justify-content:flex-start;margin-top:18px">
+      <button class="btn" id="pausedResumeBtn">Keep going now</button>
+      <a class="btn btn-ghost btn-sm" href="../index.html" style="text-decoration:none">Back to TSI hub</a>
     </div>
   </div>
 </section>
@@ -463,16 +498,17 @@ const STRANDS = {
 
 /* ---------------- §2  SEEDED RNG + HELPERS ---------------- */
 
-/* mulberry32 — small, fast, good enough. Seeded so a teacher can hand
-   out one code and every student gets the identical 20 questions. */
-function makeRng(seed){
-  let a = seed >>> 0;
-  return function(){
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+/* mulberry32, kept as one restorable 32-bit integer rather than hidden in a
+   closure. Seeded so a teacher can hand out one code and every student gets
+   the identical 20 questions — and so a half-finished test can be rebuilt
+   exactly from its seed (see SNAPSHOT / REPLAY). */
+let RNG_STATE = 0;
+function seedRng(seed){ RNG_STATE = seed >>> 0; }
+function rnd(){
+  RNG_STATE = (RNG_STATE + 0x6D2B79F5) | 0;
+  let t = Math.imul(RNG_STATE ^ (RNG_STATE >>> 15), 1 | RNG_STATE);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 function seedToCode(seed){
@@ -488,8 +524,6 @@ function codeToSeed(code){
   return n >>> 0;
 }
 
-let RNG = Math.random;
-const rnd  = () => RNG();
 const ri   = (lo,hi) => lo + Math.floor(rnd()*(hi-lo+1));          // inclusive ints
 const pick = arr => arr[Math.floor(rnd()*arr.length)];
 function shuffle(arr){
@@ -1411,6 +1445,75 @@ function updateTheta(S, gen, correct){
 }
 
 /* ================================================================
+   §5b  SNAPSHOT / REPLAY  (stop now, finish later)
+   ----------------------------------------------------------------
+   The whole session is a pure function of (seed, answers chosen). Every
+   random draw — which strand is next, which item, the numbers inside it,
+   the order of the choices — comes from RNG_STATE, which starts at the
+   seed and advances identically as long as the same calls happen in the
+   same order. Those calls depend only on theta, the blueprint counters
+   and the used-item set, all of which are themselves reproduced.
+
+   So a paused test does NOT need its questions stored. It needs the seed
+   and the list of choice-indices picked so far. Twenty small integers.
+   That matters: the snapshot rides in the same synced blob as everything
+   else, and a Google Sheets cell caps out at 50,000 characters. Storing
+   rendered stems and inline SVG figures would have blown past that.
+
+   fp is a fingerprint of the item bank and blueprint. If a teacher adds
+   or reweights questions while a student has a test paused, replay would
+   silently drift onto different items — so a fingerprint mismatch
+   refuses the resume and says why instead.
+   ================================================================ */
+
+const BANK_FP = (function(){
+  const src = BANK.map(g => g.id + ':' + g.b + ':' + g.strand).join('|') +
+              '#' + JSON.stringify(CONFIG.blueprint) + '#' + CONFIG.testLength;
+  let h = 2166136261;
+  for(let i=0;i<src.length;i++){ h ^= src.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+})();
+
+function snapshot(seed, mode, picks){
+  return { v:1, seed, mode, picks: picks.slice(), n: picks.length,
+           fp: BANK_FP, at: Date.now() };
+}
+
+/* Rebuild a full session from a snapshot. Returns null if anything does not
+   line up, which the caller treats as "cannot resume, start fresh" — never
+   as a partially-restored test. */
+function replay(snap){
+  if(!snap || snap.v !== 1 || !Array.isArray(snap.picks)) return null;
+  if(snap.fp !== BANK_FP) return null;
+  if(snap.picks.length > CONFIG.testLength) return null;
+
+  seedRng(snap.seed);
+  const S2 = newSession();
+
+  for(const ci of snap.picks){
+    const strand = nextStrand(S2);
+    if(!strand) return null;
+    const gen = nextItem(S2, strand);
+    S2.used.add(gen.id);
+    S2.remaining[strand]--;
+
+    let item;
+    try { item = gen.gen(); } catch(e){ return null; }
+
+    const chosen = item.choices[ci];
+    if(chosen === undefined) return null;
+    const correct = chosen === item.answer;
+
+    S2.history.push({ id:gen.id, strand:gen.strand, skill:gen.skill, b:gen.b,
+                      correct, stem:item.stem, figure:item.figure||'',
+                      chosen, answer:item.answer, solution:item.solution });
+    updateTheta(S2, gen, correct);
+    S2.n++;
+  }
+  return S2;   /* RNG_STATE is now exactly where the student left it */
+}
+
+/* ================================================================
    §6  SCORING
    ================================================================ */
 
@@ -1509,6 +1612,27 @@ const PortalLink = {
     } catch(e){ console.warn('[tsi-crc] TSIPortal.logTest failed', e); }
   },
 
+  /* Students only — a guest's data dies with the tab, so the test hides
+     the option rather than promise something it cannot keep. */
+  get canResume(){
+    try { return this.on && window.TSIPortal.mode() === 'student'
+                 && typeof window.TSIPortal.saveResume === 'function'; }
+    catch(e){ return false; }
+  },
+  saveResume(snap, flush){
+    if(!this.canResume) return false;
+    try { return window.TSIPortal.saveResume(snap, !!flush); }
+    catch(e){ console.warn('[tsi-crc] saveResume failed', e); return false; }
+  },
+  getResume(){
+    if(!this.canResume) return null;
+    try { return window.TSIPortal.getResume(); } catch(e){ return null; }
+  },
+  clearResume(flush){
+    if(!this.canResume) return false;
+    try { return window.TSIPortal.clearResume(!!flush); } catch(e){ return false; }
+  },
+
   who(){
     if(!this.on) return null;
     try {
@@ -1530,9 +1654,16 @@ function saveLocal(obj){
    ================================================================ */
 
 const $ = id => document.getElementById(id);
-const el = { intro:$('intro'), test:$('test'), results:$('results') };
+const el = { intro:$('intro'), test:$('test'), results:$('results'), paused:$('paused') };
 
 let S = null, MODE = 'test', current = null, selected = null, locked = false, SEED = 0;
+let PICKS = [];   /* choice index per answered question — the whole savegame */
+
+function show(section){
+  ['intro','test','results','paused'].forEach(k =>
+    el[k].classList.toggle('hidden', k !== section));
+  window.scrollTo(0,0);
+}
 
 /* ---- intro ---- */
 (function initIntro(){
@@ -1552,25 +1683,79 @@ let S = null, MODE = 'test', current = null, selected = null, locked = false, SE
       : 'Practice mode: you see whether you were right, and why, after every question.';
   }
 
-  $('startBtn').onclick = start;
+  $('startBtn').onclick = () => start(null);
+
+  /* ---- unfinished test, if this student has one ---- */
+  if(!PortalLink.canResume){
+    if(PortalLink.on) $('guestNote').classList.remove('hidden');
+  } else {
+    const snap = PortalLink.getResume();
+    if(snap && snap.picks && snap.picks.length && snap.picks.length < CONFIG.testLength){
+      if(snap.fp !== BANK_FP){
+        /* the question bank changed underneath them — say so, don't drift */
+        PortalLink.clearResume(true);
+        $('guestNote').textContent =
+          'You had an unfinished test, but the practice questions have been updated since. ' +
+          'You will need to start a new one.';
+        $('guestNote').classList.remove('hidden');
+      } else {
+        $('resumeN').textContent = snap.picks.length;
+        const d = new Date(snap.at);
+        $('resumeWhen').textContent = 'Saved ' + d.toLocaleDateString(undefined,
+          { weekday:'long', month:'long', day:'numeric' }) + ' at ' +
+          d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }) + '.';
+        $('resumeCard').classList.remove('hidden');
+        $('resumeBtn').onclick = () => start(snap);
+        $('discardBtn').onclick = () => {
+          PortalLink.clearResume(true);
+          $('resumeCard').classList.add('hidden');
+        };
+      }
+    }
+  }
 })();
 
-function start(){
-  const typed = codeToSeed($('seedIn').value);
-  /* 6 base-32 chars holds 32^6 = 2^30, so seeds must stay under that to
-     survive the round trip through a shareable test code. */
-  SEED = typed !== null ? typed : (Math.floor(Math.random()*1073741824) >>> 0);
-  RNG = makeRng(SEED);
+function start(snap){
+  if(snap){
+    const restored = replay(snap);
+    if(!restored){
+      /* replay is all-or-nothing: never resume a half-rebuilt test */
+      PortalLink.clearResume(true);
+      $('resumeCard').classList.add('hidden');
+      alert("Sorry — that unfinished test could not be restored, so you'll need to start a new one. Nothing else was lost.");
+      return;
+    }
+    SEED  = snap.seed;
+    MODE  = snap.mode || 'test';
+    PICKS = snap.picks.slice();
+    S     = restored;
+  } else {
+    const typed = codeToSeed($('seedIn').value);
+    /* 6 base-32 chars holds 32^6 = 2^30, so seeds must stay under that to
+       survive the round trip through a shareable test code. */
+    SEED = typed !== null ? typed : (Math.floor(Math.random()*1073741824) >>> 0);
+    seedRng(SEED);
+    PICKS = [];
+    S = newSession();
+    /* starting fresh abandons any previously paused test */
+    PortalLink.clearResume(false);
+  }
 
-  S = newSession();
-  el.intro.classList.add('hidden');
-  el.results.classList.add('hidden');
-  el.test.classList.remove('hidden');
-
+  show('test');
+  $('pauseBtn').classList.toggle('hidden', !PortalLink.canResume);
   $('ticks').innerHTML = Array.from({length:CONFIG.testLength}, ()=>'<i class="tick"></i>').join('');
-  serve();
-  window.scrollTo(0,0);
+
+  if(S.n >= CONFIG.testLength) finish(); else serve();
 }
+
+function pause(){
+  if(!PortalLink.canResume) return;
+  PortalLink.saveResume(snapshot(SEED, MODE, PICKS), true);
+  $('pausedN').textContent = PICKS.length;
+  show('paused');
+}
+$('pauseBtn').onclick = pause;
+$('pausedResumeBtn').onclick = () => { show('test'); serve(); };
 
 function serve(){
   const strand = nextStrand(S);
@@ -1630,7 +1815,15 @@ function submit(){
                    chosen, answer:item.answer, solution:item.solution });
   updateTheta(S, gen, correct);
   S.n++;
+  PICKS.push(selected);
   PortalLink.attempt(gen.strand, correct);
+
+  /* Autosave every answer so a closed lid or a dead battery costs at most
+     the question in progress. Debounced push, not an immediate one — the
+     explicit pause button is what forces a sync. */
+  if(PortalLink.canResume && S.n < CONFIG.testLength){
+    PortalLink.saveResume(snapshot(SEED, MODE, PICKS), false);
+  }
 
   if(MODE === 'practice'){
     const kids = $('choices').children;
@@ -1655,9 +1848,9 @@ function submit(){
 
 /* ---- results ---- */
 function finish(){
-  el.test.classList.add('hidden');
-  el.results.classList.remove('hidden');
-  window.scrollTo(0,0);
+  /* the test is done — release the slot so the hub stops offering a resume */
+  PortalLink.clearResume(false);
+  show('results');
 
   const score  = scaleScore(S.theta);
   const ready  = score >= CONFIG.scoreCut;
@@ -1747,11 +1940,10 @@ function finish(){
   };
   $('printBtn').onclick = () => window.print();
   $('againBtn').onclick = () => {
-    el.results.classList.add('hidden');
-    el.intro.classList.remove('hidden');
     $('seedIn').value = '';
+    $('resumeCard').classList.add('hidden');
     fill.style.width = '0';
-    window.scrollTo(0,0);
+    show('intro');
   };
 
   /* compact [correct, seen] per strand — what the hub report reads back */
