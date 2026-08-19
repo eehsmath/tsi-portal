@@ -308,6 +308,76 @@
     };
   }
 
+  /* ================================================================== */
+  /*  RESUME SLOT — one unfinished practice test                         */
+  /*  ----------------------------------------------------------------  */
+  /*  Students may stop a practice test and finish it later, the way the */
+  /*  real TSIA2 allows. Only ONE unfinished test is held at a time;     */
+  /*  starting a fresh test replaces it.                                 */
+  /*                                                                     */
+  /*  Identified students only. A guest's data lives in sessionStorage   */
+  /*  and dies with the tab, so a "finish later" promise we could not    */
+  /*  keep would be worse than not offering it — these return false/null */
+  /*  for guests and the test hides the option accordingly.              */
+  /*                                                                     */
+  /*  The snapshot is written by apps/tsi-crc.html and is tiny: a seed   */
+  /*  plus the list of answer choices made so far. The test replays it   */
+  /*  to rebuild the session, so nothing about the questions themselves  */
+  /*  is stored here.                                                    */
+  /* ================================================================== */
+  function saveResume(snap, flush) {
+    if (currentMode() !== 'student') return false;
+    var d = load();
+    d.resume = snap || null;
+    save(d);
+    if (flush) flushSync(); else schedulePush();
+    return true;
+  }
+
+  /* How long an unfinished test stays available. The clock runs from the
+     LAST answer, not from when the test was started, because every autosave
+     rewrites `at` — a student who works on it Friday has until two weeks
+     from Friday. Set to 0 to disable expiry entirely. */
+  var RESUME_MAX_AGE_DAYS = 14;
+
+  function getResume() {
+    if (currentMode() !== 'student') return null;
+    var d = load();
+    var r = d.resume;
+    if (!r) return null;
+
+    /* A snapshot with no timestamp is from an unknown age — treat as stale
+       rather than resume something we cannot vouch for. */
+    var stale = !r.at ||
+      (RESUME_MAX_AGE_DAYS > 0 &&
+       (Date.now() - r.at) > RESUME_MAX_AGE_DAYS * 86400000);
+
+    if (stale) {
+      delete d.resume;          // reap it so it stops syncing to the sheet
+      save(d);
+      schedulePush();
+      return null;
+    }
+    return r;
+  }
+
+  function clearResume(flush) {
+    if (currentMode() !== 'student') return false;
+    var d = load();
+    if (!d.resume) return false;
+    delete d.resume;
+    save(d);
+    if (flush) flushSync(); else schedulePush();
+    return true;
+  }
+
+  /* Push immediately instead of on the 4s debounce. Used when a student
+     deliberately stops — they may close the tab a second later. */
+  function flushSync() {
+    clearTimeout(pushTimer);
+    doPush();
+  }
+
   function hint(skillId) {
     var d = load();
     var s = d.skills[skillId] || (d.skills[skillId] = { a: 0, c: 0, h: [], lv: 1, t: 0, hints: 0 });
@@ -590,6 +660,12 @@
     logTest: logTest,
     testLog: testLog,
     testSummary: testSummary,
+
+    /* unfinished-test slot (see RESUME SLOT above) — students only */
+    saveResume: saveResume,
+    getResume: getResume,
+    clearResume: clearResume,
+    flushSync: flushSync,
 
     skill: skill,
     summary: summary,
