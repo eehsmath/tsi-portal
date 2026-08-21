@@ -345,6 +345,7 @@
     var d = load();
     var r = d.resume;
     if (!r) return null;
+    if (r.cleared) return null;      // tombstone — see clearResume()
 
     /* A snapshot with no timestamp is from an unknown age — treat as stale
        rather than resume something we cannot vouch for. */
@@ -364,8 +365,15 @@
   function clearResume(flush) {
     if (currentMode() !== 'student') return false;
     var d = load();
-    if (!d.resume) return false;
-    delete d.resume;
+    if (!d.resume || d.resume.cleared) return false;
+
+    /* Write a dated tombstone instead of deleting outright. The server merges
+       the two copies by picking whichever has the later `at`, so a plain
+       deletion here would simply be undone by an older copy still sitting in
+       the sheet — the finished test would come back as resumable. A tombstone
+       is newer than the snapshot it replaces, so it wins and the resume goes
+       away everywhere. It expires on the normal schedule below. */
+    d.resume = { cleared: true, at: Date.now() };
     save(d);
     if (flush) flushSync(); else schedulePush();
     return true;
