@@ -1582,11 +1582,36 @@ const PortalLink = {
 
   get on(){ return !!(window.TSIPortal && typeof window.TSIPortal.record === 'function'); },
 
-  /* one call per item, tagged by strand only */
-  attempt(strandKey, correct){
+  /* WHY NOTHING IS RECORDED UNTIL THE TEST IS FINISHED
+     ------------------------------------------------------------------
+     This used to fire once per question, as the student answered. That
+     meant an abandoned test left its questions permanently in the strand
+     counters — and because record() only increments and the Apps Script
+     merges with Math.max, they could never be taken back out. Teachers
+     ended up reading a mix of finished and half-finished work with no way
+     to tell them apart.
+
+     So the whole test is committed at once, at the end. An abandoned test
+     contributes nothing, because nothing was ever written. Progress on an
+     unfinished test is not lost — it lives in the resume snapshot, which
+     the teacher report reads separately as "in progress" — it just does
+     not count until the student finishes. */
+  commitItems(history){
     if(!this.on) return;
-    try { window.TSIPortal.record(this.ids[strandKey], !!correct, { level: 1 }); }
-    catch(e){ console.warn('[tsi-crc] TSIPortal.record failed', e); }
+    try {
+      history.forEach(h => {
+        window.TSIPortal.record(this.ids[h.strand], !!h.correct, { level: 1 });
+      });
+    } catch(e){ console.warn('[tsi-crc] TSIPortal.record failed', e); }
+  },
+
+  /* Push straight away rather than on the 4s debounce. Everything for this
+     test lands in one burst at the end, so a browser closed a second later
+     would otherwise take the entire test with it. */
+  flush(){
+    if(!this.on) return;
+    try { if(typeof window.TSIPortal.flushSync === 'function') window.TSIPortal.flushSync(); }
+    catch(e){}
   },
 
   /* Two writes per completed test:
@@ -1816,7 +1841,6 @@ function submit(){
   updateTheta(S, gen, correct);
   S.n++;
   PICKS.push(selected);
-  PortalLink.attempt(gen.strand, correct);
 
   /* Autosave every answer so a closed lid or a dead battery costs at most
      the question in progress. Debounced push, not an immediate one — the
@@ -1848,8 +1872,11 @@ function submit(){
 
 /* ---- results ---- */
 function finish(){
-  /* the test is done — release the slot so the hub stops offering a resume */
-  PortalLink.clearResume(false);
+  /* Commit the whole test now: every item, then the test-level record and the
+     log entry, then one immediate push. Order matters — clearResume last, so
+     a failure earlier does not leave the student with neither a saved test nor
+     a resumable one. */
+  PortalLink.commitItems(S.history);
   show('results');
 
   const score  = scaleScore(S.theta);
@@ -1955,6 +1982,8 @@ function finish(){
                     at:new Date().toISOString() };
   saveLocal(payload);
   PortalLink.finish(payload);
+  PortalLink.clearResume(false);   /* release the slot: this test is done */
+  PortalLink.flush();              /* one sync for the whole test */
 }
 
 /* expose a little for console debugging / teacher tooling */
