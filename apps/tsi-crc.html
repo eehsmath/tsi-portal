@@ -1532,8 +1532,16 @@ function strandSummary(history){
     const its = history.filter(h=>h.strand===key);
     const n = its.length, right = its.filter(h=>h.correct).length;
     const idx = n ? its.reduce((a,h)=>a + h.b + (h.correct?0.5:-0.5), 0)/n : 0;
-    const band = idx >= CONFIG.bandAdvanced ? 'Advanced'
-               : idx >= CONFIG.bandProficient ? 'Proficient' : 'Basic';
+    /* The index rewards getting HARD items right, which is the point — but on
+       its own it can label a strand Advanced off 1 of 4 correct if those items
+       happened to be hard ones. A student reading "1/4 correct — ADVANCED"
+       rightly stops trusting the report, so accuracy acts as a ceiling: you
+       cannot be called Advanced under 60%, or Proficient under 40%. */
+    const acc = n ? right/n : 0;
+    let band = idx >= CONFIG.bandAdvanced ? 'Advanced'
+             : idx >= CONFIG.bandProficient ? 'Proficient' : 'Basic';
+    if (band === 'Advanced'   && acc < 0.60) band = 'Proficient';
+    if (band === 'Proficient' && acc < 0.40) band = 'Basic';
     const skills = {};
     its.forEach(h=>{ (skills[h.skill] = skills[h.skill] || {n:0,ok:0}); skills[h.skill].n++; if(h.correct) skills[h.skill].ok++; });
     out[key] = { n, right, idx, band,
