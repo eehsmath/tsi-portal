@@ -19,6 +19,12 @@
       </div>
       <div class="idBox" id="idBox"></div>
     </div>
+    <div class="searchRow">
+      <input type="search" id="searchInput" class="searchInput" autocomplete="off"
+             placeholder="Search standards… try &quot;probability&quot;, &quot;quadratic&quot;, &quot;triangle&quot;"
+             aria-label="Search TSI standards" />
+      <button class="searchClear" id="searchClear" type="button" aria-label="Clear search" hidden>&times;</button>
+    </div>
     <div class="pills">
       <span class="pill">Answered <b id="tAttempts">0</b></span>
       <span class="pill">Accuracy <b id="tAcc">—</b></span>
@@ -28,6 +34,12 @@
       <button class="btn slate" id="crcBtn">Practice test</button>
       <button class="btn info" id="reportBtn">My report</button>
     </div>
+  </div>
+
+  <!-- ============ search results (shown instead of the grid while searching) ============ -->
+  <div class="searchResultsWrap" id="searchResultsWrap" hidden>
+    <div class="searchMeta" id="searchMeta" aria-live="polite"></div>
+    <ul class="path" id="searchResults"></ul>
   </div>
 
   <!-- ============ four sections ============ -->
@@ -150,7 +162,7 @@
 
       var html =
         '<div class="head"><div>' +
-          '<div class="eyebrow">Section '+(si+1)+' · '+sec.note+'</div>' +
+          '<div class="eyebrow">Section '+(si+1)+' · '+sec.code+'</div>' +
           '<h2>'+sec.name+'</h2>' +
           '<div class="mcount">'+s.mastered+' of '+s.readyCount+' standards polished</div>' +
         '</div>' + ringSVG(s.progress, sec.accent) + '</div>';
@@ -181,6 +193,81 @@
     $('#tAcc').textContent = t.attempts ? Math.round(100*t.correct/t.attempts)+'%' : '—';
     $('#tMastered').textContent = t.mastered;
   }
+
+  /* ---------- search ----------
+     Every TSI standard already carries the full official TSIA2 skill
+     description in TSIPortal.REGISTRY[].name (unlike the Algebra 1 portal,
+     there's no deeper per-SE breakdown to dig into) — so the search corpus
+     is just REGISTRY + SECTIONS, no separate data file needed. Matches
+     against the standard's code/name plus its section's name, so
+     "triangle"/"probability"/"quadratic" all find something relevant.
+     Results replace the four-section grid while a query is active;
+     clearing the box (or Escape) restores it. Never touches progress. */
+  function buildSearchCorpus(){
+    var secByIdx = {};
+    TSIPortal.SECTIONS.forEach(function(s){ secByIdx[s.id] = s; });
+    return TSIPortal.REGISTRY.map(function(r){
+      var sec = secByIdx[r.sec];
+      var hay = [r.code, r.name, sec ? sec.name : ''].join(' ').toLowerCase();
+      return { id: r.id, code: r.code, name: r.name, file: r.file,
+        accent: sec ? sec.accent : '#c2680c', secName: sec ? sec.name : '', hay: hay };
+    });
+  }
+  var SEARCH_CORPUS = buildSearchCorpus();
+
+  function runSearch(query){
+    var terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return null;
+    return SEARCH_CORPUS.filter(function(item){
+      return terms.every(function(t){ return item.hay.indexOf(t) !== -1; });
+    });
+  }
+
+  function searchResultHTML(item){
+    return '<li><a class="stone" style="--accent:'+item.accent+'" href="'+esc(item.file)+'?std='+esc(item.id)+'">' +
+      '<span class="dot">→</span>' +
+      '<span class="info"><span class="nm"><span class="code">'+esc(item.code)+'</span> '+esc(item.name)+'</span>' +
+        '<span class="meta">'+esc(item.secName)+'</span></span>' +
+      '<span class="go">Practice</span>' +
+    '</a></li>';
+  }
+
+  function renderSearch(query){
+    var results = runSearch(query || '');
+    var sectionsHost = $('#sections');
+    var wrap = $('#searchResultsWrap');
+    $('#searchClear').hidden = !(query && query.length);
+    if (results === null){
+      wrap.hidden = true;
+      sectionsHost.hidden = false;
+      return;
+    }
+    sectionsHost.hidden = true;
+    wrap.hidden = false;
+    var q = query.trim();
+    if (!results.length){
+      $('#searchMeta').textContent = 'No standards found for “'+q+'” — try a different word.';
+      $('#searchResults').innerHTML = '';
+    } else {
+      $('#searchMeta').textContent = results.length + (results.length === 1 ? ' standard' : ' standards') +
+        ' found for “'+q+'”';
+      $('#searchResults').innerHTML = results.map(searchResultHTML).join('');
+    }
+  }
+
+  var searchInputEl = $('#searchInput');
+  searchInputEl.addEventListener('input', function(){ renderSearch(searchInputEl.value); });
+  searchInputEl.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && searchInputEl.value){
+      searchInputEl.value = '';
+      renderSearch('');
+    }
+  });
+  $('#searchClear').addEventListener('click', function(){
+    searchInputEl.value = '';
+    renderSearch('');
+    searchInputEl.focus();
+  });
 
   /* ---------- identity display (header) ---------- */
   function updateIdentity(){

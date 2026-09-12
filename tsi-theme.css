@@ -51,6 +51,27 @@ body{
 }
 .switchLink:hover{color:var(--ink); border-color:#e0c99a}
 
+/* ---------- search ---------- */
+.searchRow{margin-top:12px; position:relative}
+.searchInput{
+  width:100%; height:48px; border:2px solid var(--ui); border-radius:14px;
+  padding:0 44px 0 16px; font:800 15px/1 inherit; color:var(--ink);
+  font-family:inherit; background:#fff;
+}
+.searchInput::placeholder{color:var(--muted); font-weight:700}
+.searchInput:focus-visible{outline:3px solid #f0a83c; outline-offset:2px}
+.searchClear{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  width:32px; height:32px; border-radius:50%; border:0; background:transparent;
+  color:var(--muted); font-size:18px; font-weight:900; cursor:pointer; line-height:1;
+}
+.searchClear:hover{background:#fbf3e6; color:var(--ink)}
+.searchResultsWrap{
+  background:var(--panel); border:1px solid var(--ui); border-radius:18px;
+  box-shadow:var(--shadow); padding:16px 16px 6px; margin-bottom:14px;
+}
+.searchMeta{color:var(--muted); font-weight:800; font-size:13px; margin:2px 4px 12px}
+
 .pills{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center}
 .pill{
   display:inline-block; padding:7px 14px; border-radius:999px; border:1px solid var(--ui);

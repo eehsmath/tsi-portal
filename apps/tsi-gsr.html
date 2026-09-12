@@ -1707,11 +1707,15 @@
         '<button class="btn primary" id="checkBtn">Check</button>' +
         (stub.hints ? '<button class="btn" id="hintBtn">Hint</button>' : '') +
         (hasSteps ? '<button class="btn" id="stepsBtn" title="Shows the full solution \u2014 a correct answer after this won\u2019t count toward mastery">Show steps</button>' : '') +
+        '<button class="btn" id="nextBtn" type="button">Next problem \u2192</button>' +
       '</div>' +
       (hasSteps ? '<div class="stepsNote">Hint gives you a nudge without the answer. Show steps walks through the full solution \u2014 use it if you\u2019re stuck, but a correct answer afterward won\u2019t count toward mastery.</div>' : '') +
       '<div class="hintPanel" id="hintPanel"></div>';
 
     if (stub.init) stub.init(p);
+    /* Next is always available (not gated behind Check) — a student can move
+       on without answering, matching the Algebra 1 portal's "New problem". */
+    $('#nextBtn').addEventListener('click', renderCard);
 
     var hintLogged = false;
     var stepsRevealed = false;
@@ -1747,11 +1751,6 @@
       document.querySelectorAll('#answerArea input, #answerArea button').forEach(function(el){ el.disabled = true; });
       $('#checkBtn').disabled = true;
       if (stub.reveal) stub.reveal(p, trueCorrect);
-      var nextBtn = document.createElement('button');
-      nextBtn.type = 'button'; nextBtn.className = 'btn primary'; nextBtn.id = 'nextBtn';
-      nextBtn.textContent = 'Next problem \u2192';
-      nextBtn.addEventListener('click', renderCard);
-      $('#actionRow').appendChild(nextBtn);
       if (!trueCorrect && hasSteps){
         stepsRevealed = true;
         var panel = $('#hintPanel');

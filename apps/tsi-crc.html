@@ -1046,6 +1046,20 @@ G('ar_inequality_budget','AR',-0.2,'Solve an inequality in context',()=>{
     choices, answer };
 });
 
+G('ar_compound_interest','AR',0.6,'Compound interest',()=>{
+  const P=pick([100,200,500,1000]), ratePercent=pick([2,4,5,8,10]), t=pick([2,3]);
+  const growth = Math.pow(1+ratePercent/100, t);
+  const v = round2(P*growth);
+  const {choices,answer} = mc(money(v), [
+    money(round2(P*(1+ratePercent/100*t))),
+    money(round2(P*Math.pow(1+ratePercent/100, t-1))),
+    money(round2(v+1))
+  ]);
+  return { stem:`An account starts with a balance of ${money(P)} and earns ${ratePercent}% interest per year, compounded annually. What is the balance after ${t} years, to the nearest cent?`,
+    solution:`Use A = P(1 + r)<sup>t</sup>, compounded annually (n = 1 time per year): A = ${money(P)} × (1 + ${ratePercent/100})<sup>${t}</sup> = ${money(P)} × ${round2(growth)} ≈ <b>${money(v)}</b><br>${money(round2(P*(1+ratePercent/100*t)))} comes from <em>simple</em> interest (multiplying the rate by the years instead of raising to a power) — compounding grows faster than that.`,
+    choices, answer };
+});
+
 /* ---------- GEOMETRIC & SPATIAL REASONING ---------- */
 
 G('gs_circumference','GSR',-0.9,'Circumference of a circle',()=>{
@@ -1206,6 +1220,18 @@ G('gs_prop_resize','GSR',0.9,'Proportional resizing',()=>{
   const {choices,answer} = mc(v+'cm', [nh+'cm', h+'cm', round1(w*h/nh)+'cm', round1(v-0.8)+'cm']);
   return { stem:`An image that is ${w} cm wide by ${h} cm high will be stretched to fit into a space ${nh} cm wide by ${nh} cm high. If the image is stretched proportionally to fit the height, how wide will the enlarged image be?`,
     solution:`Fitting the height means the scale factor is ${nh} ÷ ${h} = ${round2(nh/h)}.<br>Apply that same factor to the width: ${w} × ${round2(nh/h)} = <b>${v} cm</b><br>"Proportionally" means both dimensions use the <em>same</em> multiplier.`,
+    choices, answer };
+});
+
+G('gs_distance_points','GSR',0.5,'Distance between two points',()=>{
+  const trip=pick([[3,4,5],[6,8,10],[5,12,13],[8,15,17],[9,12,15]]);
+  const dx=trip[0], dy=trip[1], dist=trip[2];
+  const x1=ri(-5,5), y1=ri(-5,5);
+  const x2=x1+dx*pick([1,-1]), y2=y1+dy*pick([1,-1]);
+  const ddx=x2-x1, ddy=y2-y1;
+  const {choices,answer} = mc(dist, [Math.abs(ddx)+Math.abs(ddy), dist+2, dist-2]);
+  return { stem:`Point A is at (${x1}, ${y1}) and point B is at (${x2}, ${y2}). What is the distance from A to B?`,
+    solution:`The distance formula comes straight from the Pythagorean theorem: d = &radic;[(x₂ − x₁)² + (y₂ − y₁)²] = &radic;[(${ddx})² + (${ddy})²] = &radic;[${ddx*ddx} + ${ddy*ddy}] = &radic;${ddx*ddx+ddy*ddy} = <b>${dist}</b><br>${Math.abs(ddx)+Math.abs(ddy)} just adds the horizontal and vertical legs directly, skipping the Pythagorean step — that only works if the two points share the same x or y value.`,
     choices, answer };
 });
 
