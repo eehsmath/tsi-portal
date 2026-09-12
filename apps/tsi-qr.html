@@ -417,27 +417,47 @@
      QR.2 — Round numbers to a given decimal place.
      ===================================================================== */
   var QR2_curType = 'mixed';
+  /* "whole" places round a genuine large whole number (the spec's own
+     example: 4,382 -> nearest hundred -> 4,400); "decimal" places round a
+     small value stored in thousandths (existing behavior, unchanged). Both
+     share roundHalfUpInt \u2014 half-up rounding to a given divisor is the same
+     operation either way, just at a different scale. */
   var QR2_PLACES = {
-    one: { divisor: 1000, label: 'the nearest whole number' },
-    tenth: { divisor: 100, label: 'the nearest tenth' },
-    hundredth: { divisor: 10, label: 'the nearest hundredth' }
+    one: { divisor: 1000, label: 'the nearest whole number', kind: 'decimal' },
+    tenth: { divisor: 100, label: 'the nearest tenth', kind: 'decimal' },
+    hundredth: { divisor: 10, label: 'the nearest hundredth', kind: 'decimal' },
+    ten: { divisor: 10, label: 'the nearest ten', kind: 'whole' },
+    hundred: { divisor: 100, label: 'the nearest hundred', kind: 'whole' },
+    thousand: { divisor: 1000, label: 'the nearest thousand', kind: 'whole' }
   };
   function roundHalfUpInt(n, d) { var q = Math.floor(n / d); var rem = n - q * d; return (rem * 2 >= d) ? (q + 1) * d : q * d; }
+  function fmtThousands(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function genQR2(mode) {
-    var place = mode === 'mixed' ? pick(['one', 'tenth', 'hundredth']) : mode;
-    var valTh = ri(1, 999999);
+    var place = mode === 'mixed' ? pick(['one', 'tenth', 'hundredth', 'ten', 'hundred', 'thousand']) : mode;
+    var info = QR2_PLACES[place];
     var forceTie = Math.random() < 0.2;
-    var divisor = QR2_PLACES[place].divisor;
+    if (info.kind === 'whole') {
+      var val = ri(1000, 999999);
+      var divisor = info.divisor;
+      if (forceTie) {
+        var base0 = Math.floor(val / divisor) * divisor;
+        val = base0 + Math.floor(divisor / 2);
+      }
+      var rounded = roundHalfUpInt(val, divisor);
+      return { kind: 'round', place: place, isWhole: true, val: val, rounded: rounded, answer: R(rounded, 1) };
+    }
+    var valTh = ri(1, 999999);
+    var divisor = info.divisor;
     if (forceTie && divisor > 1) {
       var base = Math.floor(valTh / divisor) * divisor;
       valTh = base + Math.floor(divisor / 2);
       if (valTh === 0) valTh = divisor;
     }
     var roundedTh = roundHalfUpInt(valTh, divisor);
-    return { kind: 'round', place: place, valTh: valTh, roundedTh: roundedTh, answer: R(roundedTh, 1000) };
+    return { kind: 'round', place: place, isWhole: false, valTh: valTh, roundedTh: roundedTh, answer: R(roundedTh, 1000) };
   }
   function QR2PromptDispatch(p) {
-    var valStr = ratToDecimalStr(R(p.valTh, 1000));
+    var valStr = p.isWhole ? fmtThousands(p.val) : ratToDecimalStr(R(p.valTh, 1000));
     return '<div class="qQuestion">Round ' + valStr + ' to ' + QR2_PLACES[p.place].label + '.</div>';
   }
   function QR2AnswerDispatch(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="rounded value">' + sharedKbdHTML(); }
@@ -445,8 +465,8 @@
   function QR2CheckDispatch(p, ans) { if (!ans) return false; var r = parseRat(ans.x); if (!r) return false; return req(r, p.answer); }
   function QR2HintsDispatch(p) { return '<p>Look at the digit immediately to the right of the place you\u2019re rounding to. If it\u2019s 5 or more, round the target digit up; if it\u2019s 4 or less, leave the target digit as is \u2014 then drop everything after it.</p>'; }
   function QR2StepsDispatch(p) {
-    var valStr = ratToDecimalStr(R(p.valTh, 1000));
-    var ansStr = ratToDecimalStr(p.answer);
+    var valStr = p.isWhole ? fmtThousands(p.val) : ratToDecimalStr(R(p.valTh, 1000));
+    var ansStr = p.isWhole ? fmtThousands(p.rounded) : ratToDecimalStr(p.answer);
     var lines = [
       'Original value: ' + valStr,
       'Look at the digit right after ' + QR2_PLACES[p.place].label.replace('the nearest ', '') + '\u2019s place to decide whether to round up or down.',
@@ -1059,7 +1079,7 @@
     },
     'QR.2': {
       gen: function () { return genQR2(QR2_curType); },
-      controlsHTML: function () { return stdTypeSelHTML('qr2TypeSel', QR2_curType, [['mixed', 'Mixed'], ['one', 'Nearest Whole'], ['tenth', 'Nearest Tenth'], ['hundredth', 'Nearest Hundredth']]); },
+      controlsHTML: function () { return stdTypeSelHTML('qr2TypeSel', QR2_curType, [['mixed', 'Mixed'], ['one', 'Nearest Whole'], ['tenth', 'Nearest Tenth'], ['hundredth', 'Nearest Hundredth'], ['ten', 'Nearest Ten'], ['hundred', 'Nearest Hundred'], ['thousand', 'Nearest Thousand']]); },
       prompt: function (p) { return QR2PromptDispatch(p); },
       answerHTML: function (p) { return QR2AnswerDispatch(p); },
       read: function (p) { return QR2ReadDispatch(p); },

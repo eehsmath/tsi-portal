@@ -275,11 +275,32 @@
     var C2 = A2 * x0 + B2 * y0;
     return { kind: 'sys', A1: A1, B1: B1, C1: C1, A2: A2, B2: B2, C2: C2, x0: x0, y0: y0 };
   }
+  /* A table-based system: two linear "plans" (e.g. two flat-fee-plus-rate
+     costs) sharing a table of totals at several x-values, including the
+     x-value where they're equal — the connection to a TABULAR
+     representation the spec asks for, that was previously missing
+     entirely from AR.1 (every other kind here is pure symbolic solving). */
+  function genAR1_sysTable() {
+    var x0, m1, m2, b1, b2, tries = 0;
+    do {
+      x0 = ri(2, 5);
+      m1 = ri(2, 9);
+      do { m2 = ri(2, 9); } while (m2 === m1);
+      b1 = ri(1, 15);
+      b2 = m1 * x0 + b1 - m2 * x0;
+      tries++;
+    } while ((b2 < 0 || b2 > 30) && tries < 100);
+    var xs = [x0 - 1, x0, x0 + 1, x0 + 2];
+    var y1s = xs.map(function (x) { return m1 * x + b1; });
+    var y2s = xs.map(function (x) { return m2 * x + b2; });
+    return { kind: 'sysTable', m1: m1, b1: b1, m2: m2, b2: b2, xs: xs, y1s: y1s, y2s: y2s, x0: x0 };
+  }
   function genAR1(mode) {
-    var kind = mode === 'mixed' ? pick(['eq', 'ineq', 'sys']) : mode;
+    var kind = mode === 'mixed' ? pick(['eq', 'ineq', 'sys', 'sysTable']) : mode;
     if (kind === 'eq') return genEq();
     if (kind === 'ineq') return genIneq();
-    return genSys();
+    if (kind === 'sys') return genSys();
+    return genAR1_sysTable();
   }
 
   /* ---- display ---- */
@@ -301,6 +322,14 @@
       var left2 = basicLeftHTML(p.a, p.b);
       return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">' + left2 + ' ' + relHTML(p.r0) + ' ' + rhsHTML(p.c, p.d) + '</div>';
     }
+    if (p.kind === 'sysTable') {
+      var rowX = '<tr><th>Hours</th>' + p.xs.map(function (x) { return '<td>' + fmtInt(x) + '</td>'; }).join('') + '</tr>';
+      var rowA = '<tr><th>Company A ($)</th>' + p.y1s.map(function (y) { return '<td>' + fmtInt(y) + '</td>'; }).join('') + '</tr>';
+      var rowB = '<tr><th>Company B ($)</th>' + p.y2s.map(function (y) { return '<td>' + fmtInt(y) + '</td>'; }).join('') + '</tr>';
+      return '<div class="qQuestion">Company A charges $' + p.b1 + ' plus $' + p.m1 + ' per hour. Company B charges $' + p.b2 + ' plus $' + p.m2 + ' per hour. The table shows the total cost for each company at several numbers of hours.</div>' +
+        '<table class="ttab">' + rowX + rowA + rowB + '</table>' +
+        '<div class="qQuestion" style="margin-top:10px">After how many hours is the cost the same at both companies?</div>';
+    }
     return '<div class="qQuestion">Solve the system:</div>' +
       '<div class="eqLine">' + sysEqLineHTML(p.A1, p.B1, p.C1) + '</div>' +
       '<div class="eqLine">' + sysEqLineHTML(p.A2, p.B2, p.C2) + '</div>';
@@ -319,6 +348,10 @@
       return '<span class="ansLabel">x</span>' +
         '<div class="relSel" id="relSel" role="group" aria-label="inequality symbol">' + btns + '</div>' +
         '<input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="boundary value">' +
+        sharedKbdHTML();
+    }
+    if (p.kind === 'sysTable') {
+      return '<span class="ansLabel">Hours =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="number of hours">' +
         sharedKbdHTML();
     }
     return '<span class="ansLabel">x =</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="value of x">' +
@@ -354,6 +387,10 @@
       var r2 = parseRat(ans.x); if (!r2) return false;
       return req(r2, p.solution);
     }
+    if (p.kind === 'sysTable') {
+      var rT = parseRat(ans.x); if (!rT) return false;
+      return req(rT, R(p.x0, 1));
+    }
     var rx = parseRat(ans.x), ry = parseRat(ans.y);
     if (!rx || !ry) return false;
     return req(rx, R(p.x0, 1)) && req(ry, R(p.y0, 1));
@@ -385,6 +422,11 @@
       lines2.push('x ' + relHTML(p.finalRel) + ' ' + fmtInt(p.x0));
       return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
     }
+    if (p.kind === 'sysTable') {
+      var rowIdx = p.xs.indexOf(p.x0);
+      return '<ol class="stepList"><li>Scan across each column of the table and compare Company A’s cost to Company B’s cost.</li>' +
+        '<li>At ' + p.x0 + ' hours: Company A = $' + p.y1s[rowIdx] + ', Company B = $' + p.y2s[rowIdx] + ' — they match.</li></ol>';
+    }
     var A1 = p.A1, B1 = p.B1, C1 = p.C1, A2 = p.A2, B2 = p.B2, C2 = p.C2;
     var yNum = A2 * C1 - A1 * C2, yDen = A2 * B1 - A1 * B2;
     var lines3 = [];
@@ -413,6 +455,9 @@
       return '<p>Move the x-terms to one side and the constants to the other, just like an equation. ' +
         'If the x-coefficient ends up negative, dividing by it flips the inequality symbol \u2014 check yours carefully.</p>';
     }
+    if (p.kind === 'sysTable') {
+      return '<p>Compare the two companies’ costs at each number of hours in the table — look for the column where the two amounts are equal.</p>';
+    }
     return '<p>Try multiplying one or both equations so the coefficient of x (or y) matches in both, ' +
       'then add or subtract the equations to eliminate that variable.</p>';
   }
@@ -422,7 +467,7 @@
   }
   function typeSelHTML() {
     return stdTypeSelHTML('ar1TypeSel', AR1_curType, [
-      ['mixed', 'Mixed'], ['eq', 'Equations'], ['ineq', 'Inequalities'], ['sys', 'Systems']
+      ['mixed', 'Mixed'], ['eq', 'Equations'], ['ineq', 'Inequalities'], ['sys', 'Systems'], ['sysTable', 'Systems — Table']
     ]);
   }
   function wireRelSel() {
@@ -697,11 +742,31 @@
     var m = pick(squareFree), k = ri(2, 6);
     return { kind: 'radSimplify', k: k, m: m, N: k * k * m };
   }
+  /* Rational expressions were previously missing from AR.4 entirely (AR.5
+     has a rational EQUATION to solve, but nothing here tested manipulating
+     a rational EXPRESSION). Two focused variants, kept as simple as the
+     other three kinds above:
+       - simplify: factor a difference-of-squares numerator and cancel the
+         shared binomial factor with the denominator — genuine "manipulate
+         a rational expression" work, distinct from radSimplify/exponentRules.
+       - domain: identify the one x-value that makes a rational expression
+         undefined — the domain-restriction concept that's central to
+         "rational expressions" but untested by any other AR.4 kind. */
+  function genAR4_rationalSimplify() {
+    var k = nonZero(-9, 9);
+    return { kind: 'rationalSimplify', k: k };
+  }
+  function genAR4_rationalDomain() {
+    var a = nonZero(-9, 9), k = nonZero(-9, 9);
+    return { kind: 'rationalDomain', a: a, k: k, excluded: -a };
+  }
   function genAR4(mode) {
-    var kind = mode === 'mixed' ? pick(['polyAddSub', 'exponentRules', 'radSimplify']) : mode;
+    var kind = mode === 'mixed' ? pick(['polyAddSub', 'exponentRules', 'radSimplify', 'rationalSimplify', 'rationalDomain']) : mode;
     if (kind === 'polyAddSub') return genAR4_polyAddSub();
     if (kind === 'exponentRules') return genAR4_exponentRules();
-    return genAR4_radSimplify();
+    if (kind === 'radSimplify') return genAR4_radSimplify();
+    if (kind === 'rationalSimplify') return genAR4_rationalSimplify();
+    return genAR4_rationalDomain();
   }
 
   function polyHTML(a, b, c) { return firstVarTerm(a, 'x<sup>2</sup>') + joinVarTerm(b, 'x') + joinConstInt(c); }
@@ -724,7 +789,13 @@
       else body = monomialHTML(p.k1, p.a) + ' \u00f7 ' + monomialHTML(p.k2, p.b);
       return '<div class="qQuestion">Simplify:</div><div class="eqLine">' + body + '</div>';
     }
-    return '<div class="qQuestion">Simplify:</div><div class="eqLine">&radic;' + p.N + '</div>';
+    if (p.kind === 'radSimplify') return '<div class="qQuestion">Simplify:</div><div class="eqLine">&radic;' + p.N + '</div>';
+    if (p.kind === 'rationalSimplify') {
+      return '<div class="qQuestion">Simplify (assume x is never a value that makes the denominator zero). Your answer will be in the form x + c — what is c?</div>' +
+        '<div class="eqLine">(x<sup>2</sup>' + joinConstInt(-(p.k * p.k)) + ') / (x' + joinConstInt(-p.k) + ')</div>';
+    }
+    return '<div class="qQuestion">For what value of x is this expression undefined?</div>' +
+      '<div class="eqLine">' + fmtInt(p.k) + ' / (x' + joinConstInt(p.a) + ')</div>';
   }
 
   function AR4AnswerDispatch(p) {
@@ -740,9 +811,14 @@
         '<span class="ansLabel">exponent =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="exponent">' +
         sharedKbdHTML();
     }
-    return '<span class="ansLabel">outside &radic; =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="coefficient outside radical">' +
-      '<span class="ansLabel">inside &radic; =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="radicand">' +
-      sharedKbdHTML();
+    if (p.kind === 'radSimplify') {
+      return '<span class="ansLabel">outside &radic; =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="coefficient outside radical">' +
+        '<span class="ansLabel">inside &radic; =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="radicand">' +
+        sharedKbdHTML();
+    }
+    var oneFieldLabel = p.kind === 'rationalSimplify' ? 'c =' : 'x =';
+    var oneFieldAria = p.kind === 'rationalSimplify' ? 'constant term' : 'excluded value of x';
+    return '<span class="ansLabel">' + oneFieldLabel + '</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="' + oneFieldAria + '">' + sharedKbdHTML();
   }
 
   function AR4ReadDispatch(p) {
@@ -751,6 +827,12 @@
       var va = ea ? ea.value.trim() : '', vb = eb ? eb.value.trim() : '', vc = ec ? ec.value.trim() : '';
       if (va === '' && vb === '' && vc === '') return null;
       return { a: va, b: vb, c: vc };
+    }
+    if (p.kind === 'rationalSimplify' || p.kind === 'rationalDomain') {
+      var eaS = document.getElementById('ans_a');
+      var vaS = eaS ? eaS.value.trim() : '';
+      if (vaS === '') return null;
+      return { a: vaS };
     }
     var ea2 = document.getElementById('ans_a'), eb2 = document.getElementById('ans_b');
     var va2 = ea2 ? ea2.value.trim() : '', vb2 = eb2 ? eb2.value.trim() : '';
@@ -770,6 +852,14 @@
       if (!rc1 || !rc2) return false;
       return req(rc1, R(p.coefOut, 1)) && req(rc2, R(p.expOut, 1));
     }
+    if (p.kind === 'rationalSimplify') {
+      var rSimp = parseRat(ans.a); if (!rSimp) return false;
+      return req(rSimp, R(p.k, 1));
+    }
+    if (p.kind === 'rationalDomain') {
+      var rDom = parseRat(ans.a); if (!rDom) return false;
+      return req(rDom, R(p.excluded, 1));
+    }
     var rk = parseRat(ans.a), rm = parseRat(ans.b);
     if (!rk || !rm) return false;
     return req(rk, R(p.k, 1)) && req(rm, R(p.m, 1));
@@ -782,7 +872,9 @@
       if (p.variant === 'pow') return '<p>Raise the coefficient to the outer power, and multiply the exponents.</p>';
       return '<p>Divide the coefficients, and subtract the exponents (same base).</p>';
     }
-    return '<p>Find the largest perfect-square factor of the number under the radical, then take its square root out front.</p>';
+    if (p.kind === 'radSimplify') return '<p>Find the largest perfect-square factor of the number under the radical, then take its square root out front.</p>';
+    if (p.kind === 'rationalSimplify') return '<p>The numerator is a difference of squares: x\u00b2 \u2212 k\u00b2 = (x \u2212 k)(x + k). One of those factors matches the denominator exactly and cancels.</p>';
+    return '<p>A rational expression is undefined wherever its denominator equals zero. Set the denominator equal to 0 and solve for x.</p>';
   }
 
   function AR4StepsDispatch(p) {
@@ -811,11 +903,26 @@
       ];
       return '<ol class="stepList"><li>' + lines2.join('</li><li>') + '</li></ol>';
     }
-    var lines3 = [
-      'Find the largest perfect square that divides ' + p.N + ': ' + fmtInt(p.k) + '<sup>2</sup> \u00d7 ' + p.m + ' = ' + p.N,
-      '&radic;' + p.N + ' = &radic;(' + fmtInt(p.k) + '<sup>2</sup> \u00d7 ' + p.m + ') = ' + fmtInt(p.k) + '&radic;' + p.m
+    if (p.kind === 'radSimplify') {
+      var lines3 = [
+        'Find the largest perfect square that divides ' + p.N + ': ' + fmtInt(p.k) + '<sup>2</sup> \u00d7 ' + p.m + ' = ' + p.N,
+        '&radic;' + p.N + ' = &radic;(' + fmtInt(p.k) + '<sup>2</sup> \u00d7 ' + p.m + ') = ' + fmtInt(p.k) + '&radic;' + p.m
+      ];
+      return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'rationalSimplify') {
+      var lines5 = [
+        'Factor the numerator as a difference of squares: x<sup>2</sup>' + joinConstInt(-(p.k * p.k)) + ' = (x' + joinConstInt(-p.k) + ')(x' + joinConstInt(p.k) + ')',
+        'The factor (x' + joinConstInt(-p.k) + ') matches the denominator exactly, so it cancels \u2014 that\u2019s only valid because the denominator (and therefore this factor) is never actually 0.',
+        'What\u2019s left: x' + joinConstInt(p.k)
+      ];
+      return '<ol class="stepList"><li>' + lines5.join('</li><li>') + '</li></ol>';
+    }
+    var lines6 = [
+      'Set the denominator equal to 0: x' + joinConstInt(p.a) + ' = 0',
+      'Solve for x: x = ' + fmtInt(p.excluded)
     ];
-    return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+    return '<ol class="stepList"><li>' + lines6.join('</li><li>') + '</li></ol>';
   }
 
   /* =====================================================================
@@ -846,12 +953,25 @@
     } while (k === 0 && tries < 50);
     return { kind: 'rational', a: a, c: c, k: k, x0: x0 };
   }
+  /* A table-based exponential connection — the SLO's own wording ("as well
+     as make connections among graphical, tabular, and algebraic
+     representations") had zero table/graph content anywhere in AR.5
+     before this. y = a*b^x shown as a table for x=0..3; extend the same
+     ×b pattern one more step to solve for y at x=4. */
+  function genAR5_expTable() {
+    var a = ri(1, 5), b = pick([2, 3]);
+    var xs = [0, 1, 2, 3];
+    var ys = xs.map(function (x) { return a * Math.pow(b, x); });
+    var answer = a * Math.pow(b, 4);
+    return { kind: 'expTable', a: a, b: b, xs: xs, ys: ys, answer: answer };
+  }
   function genAR5(mode) {
-    var kind = mode === 'mixed' ? pick(['quadratic', 'exponential', 'radical', 'rational']) : mode;
+    var kind = mode === 'mixed' ? pick(['quadratic', 'exponential', 'radical', 'rational', 'expTable']) : mode;
     if (kind === 'quadratic') return genAR5_quadratic();
     if (kind === 'exponential') return genAR5_exponential();
     if (kind === 'radical') return genAR5_radical();
-    return genAR5_rational();
+    if (kind === 'rational') return genAR5_rational();
+    return genAR5_expTable();
   }
 
   function quadFactorHTML(r) {
@@ -870,6 +990,12 @@
     if (p.kind === 'radical') {
       return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">&radic;(x' + joinConstInt(p.k) + ') = ' + p.m + '</div>';
     }
+    if (p.kind === 'expTable') {
+      var rowX = '<tr><th>x</th>' + p.xs.map(function (x) { return '<td>' + x + '</td>'; }).join('') + '<td>4</td></tr>';
+      var rowY = '<tr><th>y</th>' + p.ys.map(function (y) { return '<td>' + y + '</td>'; }).join('') + '<td class="unknown">?</td></tr>';
+      return '<div class="qQuestion">The table shows values of an exponential function. Find the missing value.</div>' +
+        '<table class="ttab">' + rowX + rowY + '</table>';
+    }
     return '<div class="qQuestion">Solve for <i>x</i>:</div><div class="eqLine">' + fmtInt(p.k) + ' / (x' + joinConstInt(p.a) + ') = ' + fmtInt(p.c) + '</div>';
   }
 
@@ -878,6 +1004,9 @@
       return '<span class="ansLabel">smaller x =</span><input type="text" class="in" id="ans_a" autocomplete="off" aria-label="smaller solution">' +
         '<span class="ansLabel">larger x =</span><input type="text" class="in" id="ans_b" autocomplete="off" aria-label="larger solution">' +
         sharedKbdHTML();
+    }
+    if (p.kind === 'expTable') {
+      return '<span class="ansLabel">y =</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="missing table value">' + sharedKbdHTML();
     }
     return '<span class="ansLabel">x =</span><input type="text" class="in" id="ans_x" autocomplete="off" aria-label="value of x">' + sharedKbdHTML();
   }
@@ -902,6 +1031,10 @@
       if (!ra || !rb) return false;
       return req(ra, R(p.r1, 1)) && req(rb, R(p.r2, 1));
     }
+    if (p.kind === 'expTable') {
+      var rE = parseRat(ans.x); if (!rE) return false;
+      return req(rE, R(p.answer, 1));
+    }
     var r = parseRat(ans.x); if (!r) return false;
     return req(r, R(p.x0, 1));
   }
@@ -910,6 +1043,7 @@
     if (p.kind === 'quadratic') return '<p>Find two numbers that multiply to the constant term and add to the coefficient of x, then write the equation as a product of two factors set to zero.</p>';
     if (p.kind === 'exponential') return '<p>Divide both sides by the coefficient out front, then rewrite the constant as a power of the same base.</p>';
     if (p.kind === 'radical') return '<p>Square both sides to eliminate the square root, then solve the resulting equation for x.</p>';
+    if (p.kind === 'expTable') return '<p>Look at how the output changes from one column to the next — for an exponential pattern, you multiply by the same number every time.</p>';
     return '<p>Multiply both sides by the denominator to clear the fraction, then solve the resulting linear equation.</p>';
   }
 
@@ -936,6 +1070,13 @@
         'x = ' + (p.m * p.m) + joinConstInt(-p.k) + ' = ' + p.x0
       ];
       return '<ol class="stepList"><li>' + lines3.join('</li><li>') + '</li></ol>';
+    }
+    if (p.kind === 'expTable') {
+      var lines5 = [
+        'Each step from one x to the next multiplies y by ' + p.b + ': ' + p.ys.join(' → ') + ' → ?',
+        'Continue the pattern: ' + p.ys[3] + ' × ' + p.b + ' = ' + p.answer
+      ];
+      return '<ol class="stepList"><li>' + lines5.join('</li><li>') + '</li></ol>';
     }
     var lines4 = [
       'Multiply both sides by (x' + joinConstInt(p.a) + '): ' + fmtInt(p.k) + ' = ' + fmtInt(p.c) + 'x' + joinConstInt(p.c * p.a),
@@ -1015,7 +1156,8 @@
       gen: function () { return genAR4(AR4_curType); },
       controlsHTML: function () {
         return stdTypeSelHTML('ar4TypeSel', AR4_curType, [
-          ['mixed', 'Mixed'], ['polyAddSub', 'Add/Subtract Polynomials'], ['exponentRules', 'Exponent Rules'], ['radSimplify', 'Simplify Radicals']
+          ['mixed', 'Mixed'], ['polyAddSub', 'Add/Subtract Polynomials'], ['exponentRules', 'Exponent Rules'], ['radSimplify', 'Simplify Radicals'],
+          ['rationalSimplify', 'Simplify Rational Expr.'], ['rationalDomain', 'Rational Domain']
         ]);
       },
       prompt: function (p) { return AR4PromptDispatch(p); },
@@ -1035,7 +1177,7 @@
       gen: function () { return genAR5(AR5_curType); },
       controlsHTML: function () {
         return stdTypeSelHTML('ar5TypeSel', AR5_curType, [
-          ['mixed', 'Mixed'], ['quadratic', 'Quadratic'], ['exponential', 'Exponential'], ['radical', 'Radical'], ['rational', 'Rational']
+          ['mixed', 'Mixed'], ['quadratic', 'Quadratic'], ['exponential', 'Exponential'], ['radical', 'Radical'], ['rational', 'Rational'], ['expTable', 'Exponential — Table']
         ]);
       },
       prompt: function (p) { return AR5PromptDispatch(p); },

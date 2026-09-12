@@ -1379,10 +1379,31 @@
      ===================================================================== */
 
   /* ---------------- distance & midpoint ---------------- */
+  /* The A(x1,y1)/B(x2,y2) figure is drawn on a FIXED coordinate grid
+     (coordGridSVG({lo:-8,hi:8}, ...) below) that does not auto-scale to
+     whatever points it's given. PYTH_TRIPLES (shared with GSR.6's own
+     auto-scaling triangle figure, which has no such fixed frame) includes
+     legs up to 40 — placed on this grid, that point (and the segment to
+     it) lands far outside the visible -8..8 area, or gets clipped
+     entirely. Restrict to triples whose larger leg still fits the grid's
+     16-unit span, and constrain the FIRST point's placement (not a plain
+     ri(-6,6)) so the second point is guaranteed to land in-bounds too. */
+  var GSR7_GRID = { lo: -8, hi: 8 };
+  var GSR7_DISTANCE_TRIPLES = PYTH_TRIPLES.filter(function (t) {
+    return Math.max(t[0], t[1]) <= (GSR7_GRID.hi - GSR7_GRID.lo);
+  });
+  /* Picks a first-point coordinate such that coord + delta also stays
+     within [lo, hi] — works for either sign of delta. */
+  function inGridStart(lo, hi, delta) {
+    return ri(Math.max(lo, lo - delta), Math.min(hi, hi - delta));
+  }
   function genGSR7_distance() {
-    var t = pickTriple();
-    var dx = t[0] * pick([1, -1]), dy = t[1] * pick([1, -1]);
-    var x1 = ri(-6, 6), y1 = ri(-6, 6);
+    var t = pick(GSR7_DISTANCE_TRIPLES);
+    var swap = Math.random() < 0.5;
+    var legX = swap ? t[1] : t[0], legY = swap ? t[0] : t[1];
+    var dx = legX * pick([1, -1]), dy = legY * pick([1, -1]);
+    var x1 = inGridStart(GSR7_GRID.lo, GSR7_GRID.hi, dx);
+    var y1 = inGridStart(GSR7_GRID.lo, GSR7_GRID.hi, dy);
     var x2 = x1 + dx, y2 = y1 + dy;
     var ask = pick(['distance', 'midpoint']);
     if (ask === 'distance') {
@@ -1396,8 +1417,11 @@
   function genGSR7_slope() {
     var sub = pick(['calc', 'classify']);
     if (sub === 'calc') {
-      var x1 = ri(-6, 4), y1 = ri(-6, 4);
+      // Same fixed -8..8 grid as distance/midpoint above — constrain the
+      // first point the same way so B never lands off the visible grid.
       var dx = nonZero(-6, 6), dy = ri(-8, 8);
+      var x1 = inGridStart(GSR7_GRID.lo, GSR7_GRID.hi, dx);
+      var y1 = inGridStart(GSR7_GRID.lo, GSR7_GRID.hi, dy);
       var x2 = x1 + dx, y2 = y1 + dy;
       return { kind: 'coord', ask: 'slope', sub: 'calc', x1: x1, y1: y1, x2: x2, y2: y2, answer: R(dy, dx) };
     }
@@ -1437,15 +1461,15 @@
   }
   function GSR7Prompt(p) {
     if (p.kind === 'coord' && p.ask === 'distance') {
-      var grid = coordGridSVG({ lo: -8, hi: 8 }, { points: [{ x: p.x1, y: p.y1, label: 'A(' + p.x1 + ',' + p.y1 + ')' }, { x: p.x2, y: p.y2, label: 'B(' + p.x2 + ',' + p.y2 + ')' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2 }] });
+      var grid = coordGridSVG(GSR7_GRID, { points: [{ x: p.x1, y: p.y1, label: 'A(' + p.x1 + ',' + p.y1 + ')' }, { x: p.x2, y: p.y2, label: 'B(' + p.x2 + ',' + p.y2 + ')' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2 }] });
       return '<div class="qQuestion">Find the distance between A(' + p.x1 + ', ' + p.y1 + ') and B(' + p.x2 + ', ' + p.y2 + ').</div>' + grid;
     }
     if (p.kind === 'coord' && p.ask === 'midpoint') {
-      var grid2 = coordGridSVG({ lo: -8, hi: 8 }, { points: [{ x: p.x1, y: p.y1, label: 'A(' + p.x1 + ',' + p.y1 + ')' }, { x: p.x2, y: p.y2, label: 'B(' + p.x2 + ',' + p.y2 + ')' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2, dashed: true }] });
+      var grid2 = coordGridSVG(GSR7_GRID, { points: [{ x: p.x1, y: p.y1, label: 'A(' + p.x1 + ',' + p.y1 + ')' }, { x: p.x2, y: p.y2, label: 'B(' + p.x2 + ',' + p.y2 + ')' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2, dashed: true }] });
       return '<div class="qQuestion">Find the midpoint of segment AB, where A(' + p.x1 + ', ' + p.y1 + ') and B(' + p.x2 + ', ' + p.y2 + ').</div>' + grid2;
     }
     if (p.kind === 'coord' && p.sub === 'calc') {
-      var grid3 = coordGridSVG({ lo: -8, hi: 8 }, { points: [{ x: p.x1, y: p.y1, label: 'A' }, { x: p.x2, y: p.y2, label: 'B' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2 }] });
+      var grid3 = coordGridSVG(GSR7_GRID, { points: [{ x: p.x1, y: p.y1, label: 'A' }, { x: p.x2, y: p.y2, label: 'B' }], segments: [{ x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2 }] });
       return '<div class="qQuestion">Find the slope of the line through A(' + p.x1 + ', ' + p.y1 + ') and B(' + p.x2 + ', ' + p.y2 + ').</div>' + grid3;
     }
     if (p.kind === 'coord' && p.sub === 'classify') {
