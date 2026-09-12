@@ -47,8 +47,22 @@
   function req(a, b) { return a.n === b.n && a.d === b.d; }
   function parseRat(s) {
     if (s == null) return null;
-    var t = String(s).trim().replace(/\u2212/g, '-');
+    // Strip $ and , before parsing \u2014 purely cosmetic characters a student
+    // reasonably types for a money-context answer (e.g. "$1,234.56");
+    // stripping them only ever makes parsing MORE permissive, never changes
+    // the numeric meaning of an already-valid answer.
+    var t = String(s).trim().replace(/\u2212/g, '-').replace(/[$,]/g, '');
     if (t === '') return null;
+    if (/^-?\d+\s+\d+\/\d+$/.test(t)) {
+      // mixed number, e.g. "1 3/4" or "-1 3/4" (= -(1 + 3/4), not -1 + 3/4)
+      var negM = t[0] === '-';
+      var bodyM = (negM ? t.slice(1) : t).trim();
+      var mm = bodyM.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+      var whole = parseInt(mm[1], 10), numM = parseInt(mm[2], 10), denM = parseInt(mm[3], 10);
+      if (denM === 0) return null;
+      var totalM = whole * denM + numM;
+      return R(negM ? -totalM : totalM, denM);
+    }
     if (/^-?\d+\/\d+$/.test(t)) {
       var parts = t.split('/'); var d = parseInt(parts[1], 10);
       if (d === 0) return null;

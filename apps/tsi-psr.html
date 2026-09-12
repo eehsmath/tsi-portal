@@ -49,8 +49,22 @@
   function req(a, b) { return a.n === b.n && a.d === b.d; }
   function parseRat(s) {
     if (s == null) return null;
-    var t = String(s).trim().replace(/\u2212/g, '-');
+    // Strip $ and , before parsing \u2014 purely cosmetic characters a student
+    // reasonably types for a money-context answer (e.g. "$1,234.56");
+    // stripping them only ever makes parsing MORE permissive, never changes
+    // the numeric meaning of an already-valid answer.
+    var t = String(s).trim().replace(/\u2212/g, '-').replace(/[$,]/g, '');
     if (t === '') return null;
+    if (/^-?\d+\s+\d+\/\d+$/.test(t)) {
+      // mixed number, e.g. "1 3/4" or "-1 3/4" (= -(1 + 3/4), not -1 + 3/4)
+      var negM = t[0] === '-';
+      var bodyM = (negM ? t.slice(1) : t).trim();
+      var mm = bodyM.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+      var whole = parseInt(mm[1], 10), numM = parseInt(mm[2], 10), denM = parseInt(mm[3], 10);
+      if (denM === 0) return null;
+      var totalM = whole * denM + numM;
+      return R(negM ? -totalM : totalM, denM);
+    }
     if (/^-?\d+\/\d+$/.test(t)) {
       var parts = t.split('/'); var d = parseInt(parts[1], 10);
       if (d === 0) return null;
@@ -639,7 +653,16 @@
   }
   var PSR4_LABEL = { mean: 'mean (average)', median: 'median', mode: 'mode', range: 'range' };
   function PSR4Prompt(p) {
-    return '<div class="qQuestion">Find the ' + PSR4_LABEL[p.kind] + ' of this data set:</div>' +
+    /* The mean of a small integer data set is frequently a non-terminating
+       decimal (e.g. 17/6). parseRat/req require an EXACT match, so without
+       this note a student who correctly computes "2.83" has no way to know
+       the exact fraction is what's actually being graded. Always shown for
+       "mean" (never conditioned on whether THIS instance is whole), so the
+       note itself can't tip off whether the answer happens to be even. */
+    var meanNote = (p.kind === 'mean')
+      ? ' If it isn’t a whole number, give your answer as a fraction (not a rounded decimal).'
+      : '';
+    return '<div class="qQuestion">Find the ' + PSR4_LABEL[p.kind] + ' of this data set:' + meanNote + '</div>' +
       '<div class="eqLine">' + p.data.join(', ') + '</div>';
   }
   function PSR4AnswerHTML(p) { return '<span class="ansLabel">Answer =</span><input type="text" class="in" id="ans_x" inputmode="text" autocomplete="off" aria-label="answer">' + sharedKbdHTML(); }
