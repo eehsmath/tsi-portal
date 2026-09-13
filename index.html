@@ -147,20 +147,6 @@
       '<div class="pct">'+Math.round(pct*100)+'%</div></div>';
   }
 
-  /* Which sections are expanded, keyed by section id. Starts empty (every
-     section collapsed) on a fresh page load; persists across re-renders
-     within the same visit (ID switch, guest start, pageshow) so expanding
-     a section and clicking into a standard doesn't collapse it again the
-     moment you hit back. */
-  var expandedSections = {};
-  function toggleSection(id, headEl, listEl){
-    var open = !expandedSections[id];
-    expandedSections[id] = open;
-    listEl.hidden = !open;
-    headEl.setAttribute('aria-expanded', open ? 'true' : 'false');
-    headEl.classList.toggle('is-open', open);
-  }
-
   function render(){
     var host = $('#sections');
     host.innerHTML = '';
@@ -169,21 +155,19 @@
     TSIPortal.SECTIONS.forEach(function(sec, si){
       var skills = TSIPortal.REGISTRY.filter(function(r){ return r.sec === sec.id; });
       var s = sum[sec.id];
-      var open = !!expandedSections[sec.id];
 
       var card = document.createElement('div');
       card.className = 'sec';
       card.style.setProperty('--accent', sec.accent);
 
       var html =
-        '<div class="head'+(open?' is-open':'')+'" role="button" tabindex="0" aria-expanded="'+(open?'true':'false')+'"><div>' +
+        '<div class="head"><div>' +
           '<div class="eyebrow">Section '+(si+1)+' · '+sec.code+'</div>' +
           '<h2>'+sec.name+'</h2>' +
           '<div class="mcount">'+s.mastered+' of '+s.readyCount+' standards polished</div>' +
-        '</div><div style="display:flex; align-items:center; gap:10px">' + ringSVG(s.progress, sec.accent) +
-          '<span class="chev" aria-hidden="true">&#9662;</span></div></div>';
+        '</div>' + ringSVG(s.progress, sec.accent) + '</div>';
 
-      html += '<ul class="path"'+(open?'':' hidden')+'>';
+      html += '<ul class="path">';
       skills.forEach(function(r, i){
         var st = TSIPortal.skill(r.id);
         var cls = 'stone' + (st.mastered ? ' mastered' : st.attempts ? ' started' : '');
@@ -201,12 +185,6 @@
       html += '</ul>';
 
       card.innerHTML = html;
-      var headEl = card.querySelector('.head');
-      var listEl = card.querySelector('.path');
-      headEl.addEventListener('click', function(){ toggleSection(sec.id, headEl, listEl); });
-      headEl.addEventListener('keydown', function(e){
-        if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleSection(sec.id, headEl, listEl); }
-      });
       host.appendChild(card);
     });
 

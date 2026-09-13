@@ -112,10 +112,7 @@ body{
   box-shadow:var(--shadow); padding:16px; display:flex; flex-direction:column;
   border-top:5px solid var(--accent);
 }
-.sec .head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px; cursor:pointer; border-radius:12px}
-.sec .head:hover{background:#fbf3e6}
-.sec .head .chev{font-size:18px; color:var(--muted); transition:transform .2s ease; flex:none}
-.sec .head.is-open .chev{transform:rotate(180deg)}
+.sec .head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px}
 .sec .eyebrow{font-size:12px; font-weight:900; letter-spacing:.8px; color:var(--muted); text-transform:uppercase}
 .sec h2{margin:2px 0 0; font-size:20px; font-weight:900}
 .sec .mcount{font-size:12px; font-weight:800; color:var(--muted); margin-top:3px}
