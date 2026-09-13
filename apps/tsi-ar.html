@@ -23,7 +23,7 @@
 
 </div>
 
-<script src="../portal-tsi.js?v=20260913c"></script>
+<script src="../portal-tsi.js?v=20260913d"></script>
 <script src="../tsi-calculator.js?v=20260913"></script>
 <script>
 (function(){
@@ -297,10 +297,13 @@
   }
   function genAR1(mode) {
     var kind = mode === 'mixed' ? pick(['eq', 'ineq', 'sys', 'sysTable']) : mode;
-    if (kind === 'eq') return genEq();
-    if (kind === 'ineq') return genIneq();
-    if (kind === 'sys') return genSys();
-    return genAR1_sysTable();
+    var p;
+    if (kind === 'eq') p = genEq();
+    else if (kind === 'ineq') p = genIneq();
+    else if (kind === 'sys') p = genSys();
+    else p = genAR1_sysTable();
+    p.stdType = kind;
+    return p;
   }
 
   /* ---- display ---- */
@@ -506,9 +509,12 @@
   }
   function genAR2(mode) {
     var kind = mode === 'mixed' ? pick(['fromEquation', 'fromTable', 'findInput']) : mode;
-    if (kind === 'fromEquation') return genAR2_fromEquation();
-    if (kind === 'fromTable') return genAR2_fromTable();
-    return genAR2_findInput();
+    var p;
+    if (kind === 'fromEquation') p = genAR2_fromEquation();
+    else if (kind === 'fromTable') p = genAR2_fromTable();
+    else p = genAR2_findInput();
+    p.stdType = kind;
+    return p;
   }
 
   function fnHTML(m, b) { return 'f(x) = ' + firstVarTerm(m, 'x') + joinConstInt(b); }
@@ -618,9 +624,12 @@
   }
   function genAR3(mode) {
     var kind = mode === 'mixed' ? pick(['expo', 'compound', 'quad']) : mode;
-    if (kind === 'expo') return genAR3_expo();
-    if (kind === 'compound') return genAR3_compound();
-    return genAR3_quad();
+    var p;
+    if (kind === 'expo') p = genAR3_expo();
+    else if (kind === 'compound') p = genAR3_compound();
+    else p = genAR3_quad();
+    p.stdType = kind;
+    return p;
   }
 
   var AR3_EXPO_TEMPLATES = {
@@ -762,11 +771,14 @@
   }
   function genAR4(mode) {
     var kind = mode === 'mixed' ? pick(['polyAddSub', 'exponentRules', 'radSimplify', 'rationalSimplify', 'rationalDomain']) : mode;
-    if (kind === 'polyAddSub') return genAR4_polyAddSub();
-    if (kind === 'exponentRules') return genAR4_exponentRules();
-    if (kind === 'radSimplify') return genAR4_radSimplify();
-    if (kind === 'rationalSimplify') return genAR4_rationalSimplify();
-    return genAR4_rationalDomain();
+    var p;
+    if (kind === 'polyAddSub') p = genAR4_polyAddSub();
+    else if (kind === 'exponentRules') p = genAR4_exponentRules();
+    else if (kind === 'radSimplify') p = genAR4_radSimplify();
+    else if (kind === 'rationalSimplify') p = genAR4_rationalSimplify();
+    else p = genAR4_rationalDomain();
+    p.stdType = kind;
+    return p;
   }
 
   function polyHTML(a, b, c) { return firstVarTerm(a, 'x<sup>2</sup>') + joinVarTerm(b, 'x') + joinConstInt(c); }
@@ -967,11 +979,14 @@
   }
   function genAR5(mode) {
     var kind = mode === 'mixed' ? pick(['quadratic', 'exponential', 'radical', 'rational', 'expTable']) : mode;
-    if (kind === 'quadratic') return genAR5_quadratic();
-    if (kind === 'exponential') return genAR5_exponential();
-    if (kind === 'radical') return genAR5_radical();
-    if (kind === 'rational') return genAR5_rational();
-    return genAR5_expTable();
+    var p;
+    if (kind === 'quadratic') p = genAR5_quadratic();
+    else if (kind === 'exponential') p = genAR5_exponential();
+    else if (kind === 'radical') p = genAR5_radical();
+    else if (kind === 'rational') p = genAR5_rational();
+    else p = genAR5_expTable();
+    p.stdType = kind;
+    return p;
   }
 
   function quadFactorHTML(r) {
@@ -1088,6 +1103,7 @@
   var STUBS = {
     'AR.1': {
       gen: function () { AR1_selRel = null; return genAR1(AR1_curType); },
+      variantOptions: ['eq', 'ineq', 'sys', 'sysTable'],
       controlsHTML: function () { return typeSelHTML(); },
       prompt: function (p) { return AR1PromptDispatch(p); },
       answerHTML: function (p) { return AR1AnswerDispatch(p); },
@@ -1114,6 +1130,7 @@
     },
     'AR.2': {
       gen: function () { return genAR2(AR2_curType); },
+      variantOptions: ['fromEquation', 'fromTable', 'findInput'],
       controlsHTML: function () {
         return stdTypeSelHTML('ar2TypeSel', AR2_curType, [
           ['mixed', 'Mixed'], ['fromEquation', 'From Equation'], ['fromTable', 'From Table'], ['findInput', 'Find the Input']
@@ -1134,6 +1151,7 @@
     },
     'AR.3': {
       gen: function () { return genAR3(AR3_curType); },
+      variantOptions: ['expo', 'compound', 'quad'],
       controlsHTML: function () {
         return stdTypeSelHTML('ar3TypeSel', AR3_curType, [
           ['mixed', 'Mixed'], ['expo', 'Growth & Decay'], ['compound', 'Compound Interest'], ['quad', 'Projectile Motion']
@@ -1154,6 +1172,7 @@
     },
     'AR.4': {
       gen: function () { return genAR4(AR4_curType); },
+      variantOptions: ['polyAddSub', 'exponentRules', 'radSimplify', 'rationalSimplify', 'rationalDomain'],
       controlsHTML: function () {
         return stdTypeSelHTML('ar4TypeSel', AR4_curType, [
           ['mixed', 'Mixed'], ['polyAddSub', 'Add/Subtract Polynomials'], ['exponentRules', 'Exponent Rules'], ['radSimplify', 'Simplify Radicals'],
@@ -1175,6 +1194,7 @@
     },
     'AR.5': {
       gen: function () { return genAR5(AR5_curType); },
+      variantOptions: ['quadratic', 'exponential', 'radical', 'rational', 'expTable'],
       controlsHTML: function () {
         return stdTypeSelHTML('ar5TypeSel', AR5_curType, [
           ['mixed', 'Mixed'], ['quadratic', 'Quadratic'], ['exponential', 'Exponential'], ['radical', 'Radical'], ['rational', 'Rational'], ['expTable', 'Exponential — Table']
@@ -1292,7 +1312,9 @@
       closeKeyboards();
       var trueCorrect = stub.check(p, ans);
       var countedCorrect = trueCorrect && !stepsRevealed;
-      TSIPortal.record(r.id, countedCorrect, { level: 1 });   // steps-revealed correct answers record as NOT correct — see tsi_ar_tweaking_log.md
+      var recOpts = { level: 1 };
+      if (stub.variantOptions){ recOpts.variant = p.stdType; recOpts.variantOptions = stub.variantOptions; }
+      TSIPortal.record(r.id, countedCorrect, recOpts);   // steps-revealed correct answers record as NOT correct — see tsi_ar_tweaking_log.md
       if (trueCorrect && stepsRevealed){
         fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
         fb.className = 'fbMsg warn';
