@@ -43,6 +43,11 @@
   </div>
 
   <!-- ============ four sections ============ -->
+  <div class="stateLegend" id="stateLegend">
+    <span><i class="notstarted"></i>Not started</span>
+    <span><i class="started"></i>In progress</span>
+    <span><i class="mastered"></i>Polished</span>
+  </div>
   <div class="grid" id="sections"></div>
 
 </div>
@@ -289,9 +294,11 @@
     if (results === null){
       wrap.hidden = true;
       sectionsHost.hidden = false;
+      $('#stateLegend').hidden = false;
       return;
     }
     sectionsHost.hidden = true;
+    $('#stateLegend').hidden = true;
     wrap.hidden = false;
     var q = query.trim();
     if (!results.length){

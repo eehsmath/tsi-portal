@@ -8,6 +8,7 @@
    modules) links this one file — change a color here, it's consistent
    everywhere, instead of drifting across five separate <style> blocks.
    ===================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=Fredoka:wght@500;600;700&display=swap');
 :root{
   --bg:#fdf6ec; --panel:#fff; --ui:#e8d7bd; --ink:#2a1f14; --muted:#8a7358;
   --rust:#c2680c;   /* primary accent + Geometric and Spatial Reasoning */
@@ -16,12 +17,14 @@
   --teal:#0f8b8d;   /* Probabilistic and Statistical Reasoning */
   --ok:#0b6b2f; --err:#b21f2d;
   --shadow:0 8px 20px rgba(80,50,20,.08);
+  --font-body:'Nunito', ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --font-display:'Fredoka', ui-rounded, system-ui, sans-serif;
 }
 *{box-sizing:border-box}
 html,body{min-height:100dvh}
 body{
   margin:0; background:var(--bg); color:var(--ink); overflow:auto;
-  font-family:ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family:var(--font-body);
 }
 .wrap{width:min(1240px,100%); margin:18px auto; padding:0 12px;}
 
@@ -31,7 +34,7 @@ body{
   box-shadow:var(--shadow); padding:18px 20px; margin-bottom:14px;
 }
 .hdr .toprow{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap}
-.hdr h1{margin:0; font-size:clamp(22px,3.4vw,30px); font-weight:900; letter-spacing:.2px}
+.hdr h1{margin:0; font-family:var(--font-display); font-size:clamp(22px,3.4vw,30px); font-weight:600; letter-spacing:.2px}
 .hdr .sub{color:var(--muted); font-weight:700; font-size:14px; margin-top:4px}
 .switchNav{font-size:12.5px; font-weight:800; color:var(--muted); margin-top:8px}
 .switchNav a{color:var(--rust); text-decoration:none; font-weight:900}
@@ -123,8 +126,8 @@ body{
 .sec .head:hover{background:#fbf3e6}
 .sec .head .chev{font-size:20px; color:var(--muted); transition:transform .2s ease; flex:none}
 .sec .head.is-open .chev{transform:rotate(180deg)}
-.sec .eyebrow{font-size:12px; font-weight:900; letter-spacing:.8px; color:var(--muted); text-transform:uppercase}
-.sec h2{margin:2px 0 0; font-size:20px; font-weight:900}
+.sec .eyebrow{font-family:var(--font-display); font-size:12px; font-weight:600; letter-spacing:.8px; color:var(--muted); text-transform:uppercase}
+.sec h2{margin:2px 0 0; font-family:var(--font-display); font-size:20px; font-weight:600}
 .sec .mcount{font-size:12px; font-weight:800; color:var(--muted); margin-top:3px}
 
 .ring{width:64px; height:64px; flex:none}
@@ -141,7 +144,8 @@ body{
 .node{
   width:68px; height:68px; flex:none; border-radius:50%; position:relative;
   display:flex; align-items:center; justify-content:center;
-  font-weight:900; font-size:18px; transition:background .3s, border-color .3s, color .3s;
+  font-family:var(--font-display); font-weight:600; font-size:18px;
+  transition:background .3s, border-color .3s, color .3s;
 }
 .node.notstarted{background:#fff; border:4px solid #f6ead8; color:var(--muted)}
 .node.started{background:#fff; border:4px solid #f6ead8}
@@ -163,6 +167,7 @@ body{
 
 /* collapsed: every node in one horizontal row, state still visible at a glance */
 .stripRow{list-style:none; margin:14px 0 0; padding:10px 4px 4px; position:relative; display:flex; gap:20px; flex-wrap:wrap}
+.stripRow[hidden]{display:none}
 .stripRow::before{content:""; position:absolute; left:34px; right:34px; top:44px; height:3px; background:#f6ead8; border-radius:3px; z-index:0}
 .stripItem{position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:6px; text-decoration:none; color:inherit}
 .stripItem .code{font-size:11px; font-weight:900; color:var(--muted)}
@@ -178,6 +183,17 @@ body{
 .rowBig .state{font-size:12px; font-weight:800; color:var(--muted); margin-top:2px}
 .rowBig .state.st-mastered{color:var(--ok)}
 .rowBig .go{flex:none; font-weight:900; color:var(--accent); font-size:13.5px; padding:8px 14px; border-radius:999px; border:1px solid var(--ui); background:#fff}
+
+/* One shared key for what a node's outline/ring/fill means, above all four
+   section cards rather than repeated inside each one. Uses --rust (the
+   theme's general accent) as a stand-in swatch color — the legend isn't
+   tied to any one section's own accent. */
+.stateLegend{display:flex; gap:18px; flex-wrap:wrap; margin:0 0 14px 2px; font-size:12px; font-weight:800; color:var(--muted)}
+.stateLegend span{display:inline-flex; align-items:center; gap:6px}
+.stateLegend i{width:12px; height:12px; border-radius:50%; display:inline-block}
+.stateLegend i.notstarted{background:#fff; border:2px solid #f6ead8}
+.stateLegend i.started{background:#fff; border:2px solid var(--rust)}
+.stateLegend i.mastered{background:var(--rust)}
 
 /* ---------- stepping-stone path ---------- */
 .path{list-style:none; margin:10px 0 0; padding:0; position:relative}
@@ -214,7 +230,7 @@ a.stone:hover{background:#fbf3e6}
   border-radius:24px; box-shadow:0 40px 80px rgba(40,20,5,.25)}
 .modalHead{display:flex; justify-content:space-between; align-items:center; gap:10px;
   padding:16px 20px; border-bottom:1px dashed #ece0cc}
-.modalHead h3{margin:0; font-size:20px; font-weight:900}
+.modalHead h3{margin:0; font-family:var(--font-display); font-size:20px; font-weight:600}
 .modalBody{padding:18px 20px}
 table{width:100%; border-collapse:collapse; font-size:14px}
 th{text-align:left; font-size:11px; letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
