@@ -220,6 +220,14 @@
   /* ================================================================== */
   /*  CORE API — recording answers  (unchanged)                         */
   /* ================================================================== */
+  /* opts.variant / opts.variantOptions: for a standard whose toggle can
+     narrow which problem type is asked (e.g. GSR.4's perimeter/area/
+     surfaceArea/volume/estimate/composite types), the CALLER resolves
+     "mixed" down to the concrete type actually generated for this question
+     and passes it as opts.variant, plus the toggle's full option list
+     (excluding "mixed") as opts.variantOptions — same mechanism as the
+     Algebra 1 portal's portal.js. A standard with no toggle simply never
+     passes these; variantsTotal stays 0 and the variety gate never applies. */
   function record(skillId, correct, opts) {
     opts = opts || {};
     var d = load();
@@ -231,6 +239,13 @@
     if (s.h.length > 20) s.h.shift();
     if (opts.level) s.lv = opts.level;
     s.t = Date.now();
+    if (opts.variant) {
+      if (!s.variants) s.variants = {};
+      var v = s.variants[opts.variant] || (s.variants[opts.variant] = { a: 0, c: 0 });
+      v.a += 1;
+      if (correct) v.c += 1;
+    }
+    if (opts.variantOptions && opts.variantOptions.length) s.variantOptions = opts.variantOptions.slice();
     var nowMastered = computeStats(s).mastered;
     if (!wasMastered && nowMastered && s.am == null) s.am = s.a;
     var day = d.sessions[today()] || (d.sessions[today()] = { a: 0, c: 0 });
@@ -397,19 +412,31 @@
   /* ================================================================== */
   /*  MASTERY MATH  (unchanged)                                         */
   /* ================================================================== */
+  /* mastered now also requires a strict majority of a standard's types
+     to have been attempted at least once (floor(n/2)+1) — not all of
+     them, but more than half, so mastery can't come from grinding a
+     single narrow type. Standards with no type toggle are unaffected
+     (variantsTotal stays 0). See portal.js (Algebra 1) for the same rule. */
   function computeStats(s) {
     if (!s || !s.a) {
-      return { attempts: 0, correct: 0, recentAcc: 0, mastered: false, progress: 0, level: 1, last: 0, hints: 0, attemptsToMastery: null };
+      return { attempts: 0, correct: 0, recentAcc: 0, mastered: false, progress: 0, level: 1, last: 0, hints: 0,
+        attemptsToMastery: null, variantsSeen: 0, variantsTotal: 0, variantsNeeded: 0 };
     }
     var last10 = s.h.slice(-10);
     var recentAcc = last10.length ? last10.reduce(function (x, y) { return x + y; }, 0) / last10.length : 0;
-    var mastered = s.a >= 15 && last10.length >= 10 && recentAcc >= 0.8;
-    var progress = Math.min(1, s.a / 15) * recentAcc;
+    var variantsTotal = (s.variantOptions || []).length;
+    var variantsSeen = s.variants ? Object.keys(s.variants).length : 0;
+    var variantsNeeded = variantsTotal > 1 ? Math.floor(variantsTotal / 2) + 1 : 0;
+    var varietyOK = variantsNeeded === 0 || variantsSeen >= variantsNeeded;
+    var varietyRatio = variantsNeeded > 0 ? Math.min(1, variantsSeen / variantsNeeded) : 1;
+    var mastered = s.a >= 15 && last10.length >= 10 && recentAcc >= 0.8 && varietyOK;
+    var progress = Math.min(1, s.a / 15) * recentAcc * varietyRatio;
     return {
       attempts: s.a, correct: s.c, recentAcc: recentAcc,
       mastered: mastered, progress: progress,
       level: s.lv || 1, last: s.t || 0, hints: s.hints || 0,
-      attemptsToMastery: (s.am != null ? s.am : null)
+      attemptsToMastery: (s.am != null ? s.am : null),
+      variantsSeen: variantsSeen, variantsTotal: variantsTotal, variantsNeeded: variantsNeeded
     };
   }
 

@@ -675,7 +675,9 @@
   }
   function genGSR1(mode) {
     var kind = mode === 'mixed' ? pick(['category', 'appropriate']) : mode;
-    return kind === 'category' ? genGSR1_category() : genGSR1_appropriate();
+    var p = (kind === 'category') ? genGSR1_category() : genGSR1_appropriate();
+    p.stdType = kind;
+    return p;
   }
   function GSR1Prompt(p) {
     if (p.kind === 'category') {
@@ -745,7 +747,9 @@
   }
   function genGSR2(mode) {
     var kind = mode === 'mixed' ? pick(['classify', 'pairs']) : mode;
-    return kind === 'classify' ? genGSR2_classify() : genGSR2_pairs();
+    var p = (kind === 'classify') ? genGSR2_classify() : genGSR2_pairs();
+    p.stdType = kind;
+    return p;
   }
   var GSR2_PAIR_OPTIONS = [{ v: 'complementary', label: 'Complementary' }, { v: 'supplementary', label: 'Supplementary' }, { v: 'vertical', label: 'Vertical' }];
   function GSR2Prompt(p) {
@@ -851,7 +855,9 @@
   }
   function genGSR3(mode) {
     var cat = mode === 'mixed' ? pick(['length', 'weight', 'capacity', 'time']) : mode;
-    return genGSR3_forCategory(cat);
+    var p = genGSR3_forCategory(cat);
+    p.stdType = cat;
+    return p;
   }
   function GSR3Prompt(p) {
     return '<div class="qQuestion">Convert:</div>' +
@@ -1060,12 +1066,15 @@
 
   function genGSR4(mode) {
     var kind = mode === 'mixed' ? pick(['perimeter', 'area', 'surfaceArea', 'volume', 'estimate', 'composite']) : mode;
-    if (kind === 'perimeter') return genGSR4_perimeter();
-    if (kind === 'area') return genGSR4_area();
-    if (kind === 'surfaceArea') return genGSR4_surfaceArea();
-    if (kind === 'volume') return genGSR4_volume();
-    if (kind === 'composite') return genGSR4_composite();
-    return genGSR4_estimate();
+    var p;
+    if (kind === 'perimeter') p = genGSR4_perimeter();
+    else if (kind === 'area') p = genGSR4_area();
+    else if (kind === 'surfaceArea') p = genGSR4_surfaceArea();
+    else if (kind === 'volume') p = genGSR4_volume();
+    else if (kind === 'composite') p = genGSR4_composite();
+    else p = genGSR4_estimate();
+    p.stdType = kind;
+    return p;
   }
   function GSR4Prompt(p) {
     if (p.kind === 'perimeter') return GSR4_perimeterPrompt(p);
@@ -1262,12 +1271,15 @@
 
   function genGSR5(mode) {
     var kind = mode === 'mixed' ? pick(['identify', 'apply', 'congruentSimilar', 'symmetry', 'similarSolve', 'proportional']) : mode;
-    if (kind === 'identify') return genGSR5_identify();
-    if (kind === 'apply') return genGSR5_apply();
-    if (kind === 'congruentSimilar') return genGSR5_congruentSimilar();
-    if (kind === 'similarSolve') return genGSR5_similarSolve();
-    if (kind === 'proportional') return genGSR5_proportional();
-    return genGSR5_symmetry();
+    var p;
+    if (kind === 'identify') p = genGSR5_identify();
+    else if (kind === 'apply') p = genGSR5_apply();
+    else if (kind === 'congruentSimilar') p = genGSR5_congruentSimilar();
+    else if (kind === 'similarSolve') p = genGSR5_similarSolve();
+    else if (kind === 'proportional') p = genGSR5_proportional();
+    else p = genGSR5_symmetry();
+    p.stdType = kind;
+    return p;
   }
   function GSR5Prompt(p) {
     if (p.kind === 'identify') {
@@ -1397,9 +1409,12 @@
   }
   function genGSR6(mode) {
     var kind = mode === 'mixed' ? pick(['pythagorean', 'ratio', 'solve']) : mode;
-    if (kind === 'pythagorean') return genGSR6_pythagorean();
-    if (kind === 'ratio') return genGSR6_ratio();
-    return genGSR6_solve();
+    var p;
+    if (kind === 'pythagorean') p = genGSR6_pythagorean();
+    else if (kind === 'ratio') p = genGSR6_ratio();
+    else p = genGSR6_solve();
+    p.stdType = kind;
+    return p;
   }
   var GSR6_SIDE_NAME = { opp: 'opposite leg', adj: 'adjacent leg', hyp: 'hypotenuse' };
   function GSR6Prompt(p) {
@@ -1556,9 +1571,12 @@
   }
   function genGSR7(mode) {
     var kind = mode === 'mixed' ? pick(['distance', 'slope', 'formula']) : mode;
-    if (kind === 'distance') return genGSR7_distance();
-    if (kind === 'slope') return genGSR7_slope();
-    return genGSR7_formula();
+    var p;
+    if (kind === 'distance') p = genGSR7_distance();
+    else if (kind === 'slope') p = genGSR7_slope();
+    else p = genGSR7_formula();
+    p.stdType = kind;
+    return p;
   }
   function GSR7Prompt(p) {
     if (p.kind === 'coord' && p.ask === 'distance') {
@@ -1673,6 +1691,7 @@
   var STUBS = {
     'GSR.1': {
       gen: function () { GSR1_selChoice = null; return genGSR1(GSR1_curType); },
+      variantOptions: ['category', 'appropriate'],
       controlsHTML: function () { return stdTypeSelHTML('gsr1TypeSel', GSR1_curType, [['mixed', 'Mixed'], ['category', 'Category'], ['appropriate', 'Best Estimate']]); },
       prompt: function (p) { return GSR1Prompt(p); },
       answerHTML: function (p) { return GSR1AnswerHTML(p); },
@@ -1689,6 +1708,7 @@
     },
     'GSR.2': {
       gen: function () { GSR2_selChoice = null; return genGSR2(GSR2_curType); },
+      variantOptions: ['classify', 'pairs'],
       controlsHTML: function () { return stdTypeSelHTML('gsr2TypeSel', GSR2_curType, [['mixed', 'Mixed'], ['classify', 'Classify an Angle'], ['pairs', 'Angle Pairs']]); },
       prompt: function (p) { return GSR2Prompt(p); },
       answerHTML: function (p) { return GSR2AnswerHTML(p); },
@@ -1711,6 +1731,7 @@
     },
     'GSR.3': {
       gen: function () { return genGSR3(GSR3_curType); },
+      variantOptions: ['length', 'weight', 'capacity', 'time'],
       controlsHTML: function () { return stdTypeSelHTML('gsr3TypeSel', GSR3_curType, [['mixed', 'Mixed'], ['length', 'Length'], ['weight', 'Weight/Mass'], ['capacity', 'Capacity/Volume'], ['time', 'Time']]); },
       prompt: function (p) { return GSR3Prompt(p); },
       answerHTML: function (p) { return GSR3AnswerHTML(p); },
@@ -1724,6 +1745,7 @@
     },
     'GSR.4': {
       gen: function () { return genGSR4(GSR4_curType); },
+      variantOptions: ['perimeter', 'area', 'surfaceArea', 'volume', 'estimate', 'composite'],
       controlsHTML: function () { return stdTypeSelHTML('gsr4TypeSel', GSR4_curType, [['mixed', 'Mixed'], ['perimeter', 'Perimeter'], ['area', 'Area'], ['surfaceArea', 'Surface Area'], ['volume', 'Volume'], ['estimate', 'Estimate'], ['composite', 'Composite Area']]); },
       prompt: function (p) { return GSR4Prompt(p); },
       answerHTML: function (p) { return GSR4AnswerHTML(p); },
@@ -1737,6 +1759,7 @@
     },
     'GSR.5': {
       gen: function () { GSR5_selChoice = null; return genGSR5(GSR5_curType); },
+      variantOptions: ['identify', 'apply', 'congruentSimilar', 'similarSolve', 'proportional', 'symmetry'],
       controlsHTML: function () { return stdTypeSelHTML('gsr5TypeSel', GSR5_curType, [['mixed', 'Mixed'], ['identify', 'Identify'], ['apply', 'Apply'], ['congruentSimilar', 'Congruent or Similar'], ['similarSolve', 'Solve a Similar Triangle'], ['proportional', 'Proportional Resizing'], ['symmetry', 'Symmetry']]); },
       prompt: function (p) { return GSR5Prompt(p); },
       answerHTML: function (p) { return GSR5AnswerHTML(p); },
@@ -1759,6 +1782,7 @@
     },
     'GSR.6': {
       gen: function () { return genGSR6(GSR6_curType); },
+      variantOptions: ['pythagorean', 'ratio', 'solve'],
       controlsHTML: function () { return stdTypeSelHTML('gsr6TypeSel', GSR6_curType, [['mixed', 'Mixed'], ['pythagorean', 'Pythagorean Theorem'], ['ratio', 'Trig Ratios'], ['solve', 'Find a Side or Angle']]); },
       prompt: function (p) { return GSR6Prompt(p); },
       answerHTML: function (p) { return GSR6AnswerHTML(p); },
@@ -1772,6 +1796,7 @@
     },
     'GSR.7': {
       gen: function () { GSR7_selChoice = null; return genGSR7(GSR7_curType); },
+      variantOptions: ['distance', 'slope', 'formula'],
       controlsHTML: function () { return stdTypeSelHTML('gsr7TypeSel', GSR7_curType, [['mixed', 'Mixed'], ['distance', 'Distance & Midpoint'], ['slope', 'Slope & Lines'], ['formula', 'Geometry Formulas']]); },
       prompt: function (p) { return GSR7Prompt(p); },
       answerHTML: function (p) { return GSR7AnswerHTML(p); },
@@ -1887,7 +1912,9 @@
       closeKeyboards();
       var trueCorrect = stub.check(p, ans);
       var countedCorrect = trueCorrect && !stepsRevealed;
-      TSIPortal.record(r.id, countedCorrect, { level: 1 });
+      var recOpts = { level: 1 };
+      if (stub.variantOptions){ recOpts.variant = p.stdType; recOpts.variantOptions = stub.variantOptions; }
+      TSIPortal.record(r.id, countedCorrect, recOpts);
       if (trueCorrect && stepsRevealed){
         fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
         fb.className = 'fbMsg warn';
