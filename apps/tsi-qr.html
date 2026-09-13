@@ -348,9 +348,12 @@
   }
   function genQR1(mode) {
     var kind = mode === 'mixed' ? pick(['intOp', 'decOp', 'fracOp']) : mode;
-    if (kind === 'intOp') return genQR1_intOp();
-    if (kind === 'decOp') return genQR1_decOp();
-    return genQR1_fracOp();
+    var p;
+    if (kind === 'intOp') p = genQR1_intOp();
+    else if (kind === 'decOp') p = genQR1_decOp();
+    else p = genQR1_fracOp();
+    p.stdType = kind;
+    return p;
   }
   function wrapNeg(str, isNeg) { return isNeg ? '(' + str + ')' : str; }
   function QR1PromptDispatch(p) {
@@ -444,7 +447,7 @@
         val = base0 + Math.floor(divisor / 2);
       }
       var rounded = roundHalfUpInt(val, divisor);
-      return { kind: 'round', place: place, isWhole: true, val: val, rounded: rounded, answer: R(rounded, 1) };
+      return { kind: 'round', place: place, isWhole: true, val: val, rounded: rounded, answer: R(rounded, 1), stdType: place };
     }
     var valTh = ri(1, 999999);
     var divisor = info.divisor;
@@ -454,7 +457,7 @@
       if (valTh === 0) valTh = divisor;
     }
     var roundedTh = roundHalfUpInt(valTh, divisor);
-    return { kind: 'round', place: place, isWhole: false, valTh: valTh, roundedTh: roundedTh, answer: R(roundedTh, 1000) };
+    return { kind: 'round', place: place, isWhole: false, valTh: valTh, roundedTh: roundedTh, answer: R(roundedTh, 1000), stdType: place };
   }
   function QR2PromptDispatch(p) {
     var valStr = p.isWhole ? fmtThousands(p.val) : ratToDecimalStr(R(p.valTh, 1000));
@@ -512,7 +515,9 @@
   }
   function genQR3(mode) {
     var kind = mode === 'mixed' ? pick(['compare', 'order']) : mode;
-    return kind === 'compare' ? genQR3_compare() : genQR3_order();
+    var p = (kind === 'compare') ? genQR3_compare() : genQR3_order();
+    p.stdType = kind;
+    return p;
   }
   function QR3PromptDispatch(p) {
     if (p.kind === 'compare') {
@@ -612,7 +617,9 @@
   }
   function genQR4(mode) {
     var kind = mode === 'mixed' ? pick(['compare', 'between']) : mode;
-    return kind === 'compare' ? genQR4_compare() : genQR4_between();
+    var p = (kind === 'compare') ? genQR4_compare() : genQR4_between();
+    p.stdType = kind;
+    return p;
   }
   function QR4PromptDispatch(p) {
     if (p.kind === 'compare') {
@@ -707,9 +714,12 @@
   }
   function genQR5(mode) {
     var kind = mode === 'mixed' ? pick(['proportion', 'percent', 'ratio']) : mode;
-    if (kind === 'proportion') return genQR5_proportion();
-    if (kind === 'percent') return genQR5_percent();
-    return genQR5_ratio();
+    var p;
+    if (kind === 'proportion') p = genQR5_proportion();
+    else if (kind === 'percent') p = genQR5_percent();
+    else p = genQR5_ratio();
+    p.stdType = kind;
+    return p;
   }
   function QR5PromptDispatch(p) {
     if (p.kind === 'proportion') {
@@ -840,9 +850,12 @@
   }
   function genQR6(mode) {
     var kind = mode === 'mixed' ? pick(['unitRate', 'directVariation', 'financial']) : mode;
-    if (kind === 'unitRate') return genQR6_unitRate();
-    if (kind === 'directVariation') return genQR6_directVariation();
-    return genQR6_financial();
+    var p;
+    if (kind === 'unitRate') p = genQR6_unitRate();
+    else if (kind === 'directVariation') p = genQR6_directVariation();
+    else p = genQR6_financial();
+    p.stdType = kind;
+    return p;
   }
   var QR6_LINEAR_SERVICES = [
     { noun: 'A rideshare trip', unit: 'mile', feeNoun: 'base fare' },
@@ -959,9 +972,12 @@
   }
   function genQR7(mode) {
     var kind = mode === 'mixed' ? pick(['identify', 'simplify', 'interpretMeaning']) : mode;
-    if (kind === 'identify') return genQR7_identify();
-    if (kind === 'simplify') return genQR7_simplify();
-    return genQR7_interpret();
+    var p;
+    if (kind === 'identify') p = genQR7_identify();
+    else if (kind === 'simplify') p = genQR7_simplify();
+    else p = genQR7_interpret();
+    p.stdType = kind;
+    return p;
   }
   function QR7PromptDispatch(p) {
     if (p.kind === 'identify') {
@@ -1066,6 +1082,7 @@
   var STUBS = {
     'QR.1': {
       gen: function () { return genQR1(QR1_curType); },
+      variantOptions: ['intOp', 'decOp', 'fracOp'],
       controlsHTML: function () { return stdTypeSelHTML('qr1TypeSel', QR1_curType, [['mixed', 'Mixed'], ['intOp', 'Whole & Integers'], ['decOp', 'Decimals'], ['fracOp', 'Fractions']]); },
       prompt: function (p) { return QR1PromptDispatch(p); },
       answerHTML: function (p) { return QR1AnswerDispatch(p); },
@@ -1079,6 +1096,7 @@
     },
     'QR.2': {
       gen: function () { return genQR2(QR2_curType); },
+      variantOptions: ['one', 'tenth', 'hundredth', 'ten', 'hundred', 'thousand'],
       controlsHTML: function () { return stdTypeSelHTML('qr2TypeSel', QR2_curType, [['mixed', 'Mixed'], ['one', 'Nearest Whole'], ['tenth', 'Nearest Tenth'], ['hundredth', 'Nearest Hundredth'], ['ten', 'Nearest Ten'], ['hundred', 'Nearest Hundred'], ['thousand', 'Nearest Thousand']]); },
       prompt: function (p) { return QR2PromptDispatch(p); },
       answerHTML: function (p) { return QR2AnswerDispatch(p); },
@@ -1092,6 +1110,7 @@
     },
     'QR.3': {
       gen: function () { QR3_selRel = null; return genQR3(QR3_curType); },
+      variantOptions: ['compare', 'order'],
       controlsHTML: function () { return stdTypeSelHTML('qr3TypeSel', QR3_curType, [['mixed', 'Mixed'], ['compare', 'Compare'], ['order', 'Order']]); },
       prompt: function (p) { return QR3PromptDispatch(p); },
       answerHTML: function (p) { return QR3AnswerDispatch(p); },
@@ -1111,6 +1130,7 @@
     },
     'QR.4': {
       gen: function () { QR4_selRel = null; return genQR4(QR4_curType); },
+      variantOptions: ['compare', 'between'],
       controlsHTML: function () { return stdTypeSelHTML('qr4TypeSel', QR4_curType, [['mixed', 'Mixed'], ['compare', 'Compare'], ['between', 'Between Which Integers']]); },
       prompt: function (p) { return QR4PromptDispatch(p); },
       answerHTML: function (p) { return QR4AnswerDispatch(p); },
@@ -1131,6 +1151,7 @@
     },
     'QR.5': {
       gen: function () { return genQR5(QR5_curType); },
+      variantOptions: ['proportion', 'percent', 'ratio'],
       controlsHTML: function () { return stdTypeSelHTML('qr5TypeSel', QR5_curType, [['mixed', 'Mixed'], ['proportion', 'Proportions'], ['percent', 'Percents'], ['ratio', 'Ratios']]); },
       prompt: function (p) { return QR5PromptDispatch(p); },
       answerHTML: function (p) { return QR5AnswerDispatch(p); },
@@ -1144,6 +1165,7 @@
     },
     'QR.6': {
       gen: function () { return genQR6(QR6_curType); },
+      variantOptions: ['unitRate', 'directVariation', 'financial'],
       controlsHTML: function () { return stdTypeSelHTML('qr6TypeSel', QR6_curType, [['mixed', 'Mixed'], ['unitRate', 'Unit Rate'], ['directVariation', 'Direct Variation'], ['financial', 'Financial Literacy']]); },
       prompt: function (p) { return QR6PromptDispatch(p); },
       answerHTML: function (p) { return QR6AnswerDispatch(p); },
@@ -1157,6 +1179,7 @@
     },
     'QR.7': {
       gen: function () { QR7_selChoice = null; return genQR7(QR7_curType); },
+      variantOptions: ['identify', 'simplify', 'interpretMeaning'],
       controlsHTML: function () { return stdTypeSelHTML('qr7TypeSel', QR7_curType, [['mixed', 'Mixed'], ['identify', 'Identify'], ['simplify', 'Simplify'], ['interpretMeaning', 'Interpret']]); },
       prompt: function (p) { return QR7PromptDispatch(p); },
       answerHTML: function (p) { return QR7AnswerDispatch(p); },
@@ -1272,7 +1295,9 @@
       closeKeyboards();
       var trueCorrect = stub.check(p, ans);
       var countedCorrect = trueCorrect && !stepsRevealed;
-      TSIPortal.record(r.id, countedCorrect, { level: 1 });
+      var recOpts = { level: 1 };
+      if (stub.variantOptions){ recOpts.variant = p.stdType; recOpts.variantOptions = stub.variantOptions; }
+      TSIPortal.record(r.id, countedCorrect, recOpts);
       if (trueCorrect && stepsRevealed){
         fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
         fb.className = 'fbMsg warn';

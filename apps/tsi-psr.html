@@ -455,7 +455,9 @@
   }
   function genPSR1(mode) {
     var kind = mode === 'mixed' ? pick(['tally', 'order']) : mode;
-    return kind === 'tally' ? genPSR1_tally() : genPSR1_order();
+    var p = (kind === 'tally') ? genPSR1_tally() : genPSR1_order();
+    p.stdType = kind;
+    return p;
   }
   function PSR1Prompt(p) {
     if (p.kind === 'tally') {
@@ -502,7 +504,9 @@
   }
   function genPSR2(mode) {
     var kind = mode === 'mixed' ? pick(['table', 'bar']) : mode;
-    return kind === 'table' ? genPSR2_table() : genPSR2_bar();
+    var p = (kind === 'table') ? genPSR2_table() : genPSR2_bar();
+    p.stdType = kind;
+    return p;
   }
   function PSR2Prompt(p) {
     var d = p.d;
@@ -564,7 +568,9 @@
   }
   function genPSR3(mode) {
     var kind = mode === 'mixed' ? pick(['simple', 'compound']) : mode;
-    return kind === 'simple' ? genPSR3_simple() : genPSR3_compound();
+    var p = (kind === 'simple') ? genPSR3_simple() : genPSR3_compound();
+    p.stdType = kind;
+    return p;
   }
   function contentsLine(ev) {
     return ev.container.items.map(function (name, i) { return ev.counts[i] + ' ' + name; }).join(', ') +
@@ -633,7 +639,7 @@
     var statKind = mode === 'mixed' ? pick(['mean', 'median', 'mode', 'range']) : mode;
     if (statKind === 'mode') {
       var md = genModeData();
-      return { kind: 'mode', data: md.data, modeVal: md.modeVal, modeCount: md.modeCount, answer: R(md.modeVal, 1) };
+      return { kind: 'mode', data: md.data, modeVal: md.modeVal, modeCount: md.modeCount, answer: R(md.modeVal, 1), stdType: statKind };
     }
     var n = ri(5, 9);
     var data = [];
@@ -649,7 +655,7 @@
     } else { /* range */
       answer = R(sorted[n - 1] - sorted[0], 1);
     }
-    return { kind: statKind, data: data, sorted: sorted, n: n, answer: answer };
+    return { kind: statKind, data: data, sorted: sorted, n: n, answer: answer, stdType: statKind };
   }
   var PSR4_LABEL = { mean: 'mean (average)', median: 'median', mode: 'mode', range: 'range' };
   function PSR4Prompt(p) {
@@ -742,7 +748,9 @@
   }
   function genPSR5(mode) {
     var kind = mode === 'mixed' ? pick(['classify', 'read']) : mode;
-    return kind === 'classify' ? genPSR5_classify() : genPSR5_read();
+    var p = (kind === 'classify') ? genPSR5_classify() : genPSR5_read();
+    p.stdType = kind;
+    return p;
   }
   var BOX_ASK_LABEL = { min: 'minimum', q1: 'first quartile (Q1)', median: 'median', q3: 'third quartile (Q3)', max: 'maximum', range: 'range', iqr: 'interquartile range (IQR = Q3 \u2212 Q1)' };
   function PSR5Prompt(p) {
@@ -853,7 +861,9 @@
   }
   function genPSR6(mode) {
     var kind = mode === 'mixed' ? pick(['association', 'conclusion']) : mode;
-    return kind === 'association' ? genPSR6_association() : genPSR6_conclusion();
+    var p = (kind === 'association') ? genPSR6_association() : genPSR6_conclusion();
+    p.stdType = kind;
+    return p;
   }
   function PSR6Prompt(p) {
     if (p.kind === 'association') {
@@ -937,6 +947,7 @@
   var STUBS = {
     'PSR.1': {
       gen: function () { return genPSR1(PSR1_curType); },
+      variantOptions: ['tally', 'order'],
       controlsHTML: function () { return stdTypeSelHTML('psr1TypeSel', PSR1_curType, [['mixed', 'Mixed'], ['tally', 'Tally'], ['order', 'Order']]); },
       prompt: function (p) { return PSR1Prompt(p); },
       answerHTML: function (p) { return PSR1AnswerHTML(p); },
@@ -950,6 +961,7 @@
     },
     'PSR.2': {
       gen: function () { return genPSR2(PSR2_curType); },
+      variantOptions: ['table', 'bar'],
       controlsHTML: function () { return stdTypeSelHTML('psr2TypeSel', PSR2_curType, [['mixed', 'Mixed'], ['table', 'Table'], ['bar', 'Bar Graph']]); },
       prompt: function (p) { return PSR2Prompt(p); },
       answerHTML: function (p) { return PSR2AnswerHTML(p); },
@@ -963,6 +975,7 @@
     },
     'PSR.3': {
       gen: function () { return genPSR3(PSR3_curType); },
+      variantOptions: ['simple', 'compound'],
       controlsHTML: function () { return stdTypeSelHTML('psr3TypeSel', PSR3_curType, [['mixed', 'Mixed'], ['simple', 'Single Event'], ['compound', 'Compound Event']]); },
       prompt: function (p) { return PSR3Prompt(p); },
       answerHTML: function (p) { return PSR3AnswerHTML(p); },
@@ -976,6 +989,7 @@
     },
     'PSR.4': {
       gen: function () { return genPSR4(PSR4_curType); },
+      variantOptions: ['mean', 'median', 'mode', 'range'],
       controlsHTML: function () { return stdTypeSelHTML('psr4TypeSel', PSR4_curType, [['mixed', 'Mixed'], ['mean', 'Mean'], ['median', 'Median'], ['mode', 'Mode'], ['range', 'Range']]); },
       prompt: function (p) { return PSR4Prompt(p); },
       answerHTML: function (p) { return PSR4AnswerHTML(p); },
@@ -989,6 +1003,7 @@
     },
     'PSR.5': {
       gen: function () { PSR5_selChoice = null; return genPSR5(PSR5_curType); },
+      variantOptions: ['classify', 'read'],
       controlsHTML: function () { return stdTypeSelHTML('psr5TypeSel', PSR5_curType, [['mixed', 'Mixed'], ['classify', 'Classify'], ['read', 'Read a Graph']]); },
       prompt: function (p) { return PSR5Prompt(p); },
       answerHTML: function (p) { return PSR5AnswerHTML(p); },
@@ -1009,6 +1024,7 @@
     },
     'PSR.6': {
       gen: function () { PSR6_selChoice = null; return genPSR6(PSR6_curType); },
+      variantOptions: ['association', 'conclusion'],
       controlsHTML: function () { return stdTypeSelHTML('psr6TypeSel', PSR6_curType, [['mixed', 'Mixed'], ['association', 'Association'], ['conclusion', 'Draw a Conclusion']]); },
       prompt: function (p) { return PSR6Prompt(p); },
       answerHTML: function (p) { return PSR6AnswerHTML(p); },
@@ -1126,7 +1142,9 @@
       closeKeyboards();
       var trueCorrect = stub.check(p, ans);
       var countedCorrect = trueCorrect && !stepsRevealed;
-      TSIPortal.record(r.id, countedCorrect, { level: 1 });
+      var recOpts = { level: 1 };
+      if (stub.variantOptions){ recOpts.variant = p.stdType; recOpts.variantOptions = stub.variantOptions; }
+      TSIPortal.record(r.id, countedCorrect, recOpts);
       if (trueCorrect && stepsRevealed){
         fb.textContent = 'Correct \u2014 but since you viewed the full solution, this one won\u2019t count toward your mastery. Try the next one on your own!';
         fb.className = 'fbMsg warn';
