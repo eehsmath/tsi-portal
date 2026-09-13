@@ -30,7 +30,8 @@
       <span class="pill">Accuracy <b id="tAcc">—</b></span>
       <span class="pill">Standards polished <b id="tMastered">0</b></span>
       <span style="flex:1"></span>
-      <button class="btn primary" id="continueBtn">Continue my path →</button>
+      <button class="btn" id="moreBtn">More practice</button>
+      <button class="btn" id="resourcesBtn">Resources</button>
       <button class="btn slate" id="crcBtn">Practice test</button>
       <button class="btn info" id="reportBtn">My report</button>
     </div>
@@ -107,6 +108,39 @@
         <thead id="repHead"></thead>
         <tbody id="repRows"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ more practice (Algebra 1 legacy apps) modal ============ -->
+<div class="modal" id="moreModal" role="dialog" aria-modal="true" aria-label="More practice apps">
+  <div class="modalCard moreCard">
+    <div class="modalHead">
+      <h3>More Practice</h3>
+      <div class="noprint"><button class="btn" id="closeMore">Close</button></div>
+    </div>
+    <div class="modalBody">
+      <p class="lead" style="margin:0 0 14px; color:var(--muted); font-weight:700; font-size:14px">
+        Extra algebra practice apps from the Algebra 1 portal. These don't connect to your TSI
+        progress — they're just for additional practice.
+      </p>
+      <ul class="moreList" id="moreList"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============ resources modal ============ -->
+<div class="modal" id="resourcesModal" role="dialog" aria-modal="true" aria-label="Resources">
+  <div class="modalCard moreCard">
+    <div class="modalHead">
+      <h3>Resources</h3>
+      <div class="noprint"><button class="btn" id="closeResources">Close</button></div>
+    </div>
+    <div class="modalBody">
+      <p class="lead" style="margin:0 0 14px; color:var(--muted); font-weight:700; font-size:14px">
+        Official TSIA2 standards and College Board reference materials.
+      </p>
+      <ul class="moreList" id="resourcesList"></ul>
     </div>
   </div>
 </div>
@@ -392,11 +426,77 @@
     openIntro();
   }
 
-  /* ---------- continue my path ---------- */
-  $('#continueBtn').addEventListener('click', function(){
-    var next = TSIPortal.nextOnPath();
-    if(next){ location.href = next.file; }
+  /* ---------- more practice (Algebra 1 legacy apps) ----------
+     TSI has no legacy-apps folder of its own — this reuses the exact same
+     list from the Algebra 1 portal's index.html, linked cross-origin since
+     the files live in that repo, not this one. Keep this list in sync with
+     LEGACY_APPS in algebra1-portal/index.html by hand; there's no shared
+     source between the two repos. */
+  var ALGEBRA_BASE = 'https://eehsmath.github.io/algebra1-portal/';
+  var LEGACY_APPS = [
+    { name: 'Attributes Trainer', desc: ' Attributes of Linear, Quadratic & Exponential Functions.', file: 'more/attributes.html', group: 'skill' },
+    { name: 'Slope Trainer', desc: ' Find Slope and YIntercept', file: 'more/slope.html', group: 'skill' },
+    { name: 'Domain & Range Lab', desc: ' Interactive Helper to learn Domain and Range.', file: 'more/domain-range.html', group: 'skill' },
+    { name: 'MathText', desc: ' Solve Various Word Problems w/Steps Explained', file: 'more/word-problems.html', group: 'skill' },
+    { name: 'Solver', desc: ' Solve Equations & Inequalities w/Steps Explained', file: 'more/equations-inequalities.html', group: 'skill' },
+    { name: 'Polynomial Tools', desc: ' Factoring/FOIL & Laws Of Exponents', file: 'more/polynomials.html', group: 'skill' },
+    { name: 'PlotThePoint', desc: ' Find Coordinates on the Graph', file: 'more/plot-point.html', group: 'drill' },
+    { name: 'Function or Not?', desc: ' Is the Graph, Table, or Points a Function', file: 'more/function-or-not.html', group: 'drill' },
+    { name: 'Parallel or Perpendicular', desc: ' Compare Two Slopes to Identify Parallel/Perpendicular/Neither', file: 'more/parallel-perpendicular.html', group: 'drill' },
+    { name: 'Standard to Slope-Intercept', desc: ' Find Slope (m) & Y-Intercept (b)', file: 'more/function-or-not.html', group: 'drill' }
+  ];
+  var GROUP_LABELS = { skill: 'Skills', drill: 'Drills' };
+  var GROUP_ORDER = ['skill', 'drill'];
+
+  function moreItemHTML(app, i){
+    return '<li><a class="moreItem" href="'+esc(ALGEBRA_BASE + app.file)+'" target="_blank" rel="noopener">'+
+      '<span class="glyph">'+(i+1)+'</span>'+
+      '<span class="info"><span class="nm">'+esc(app.name)+'</span>'+
+        '<span class="ds">'+esc(app.desc||'')+'</span></span>'+
+      '<span class="go">Open →</span>'+
+    '</a></li>';
+  }
+  function renderMore(){
+    var host = $('#moreList');
+    var html = '', counter = 0;
+    GROUP_ORDER.forEach(function(key){
+      var apps = LEGACY_APPS.filter(function(a){ return a.group === key; });
+      if (!apps.length) return;
+      html += '<li class="moreSectionHead">'+esc(GROUP_LABELS[key] || key)+'</li>';
+      html += apps.map(function(app){ counter++; return moreItemHTML(app, counter - 1); }).join('');
+    });
+    host.innerHTML = html;
+  }
+  $('#moreBtn').addEventListener('click', function(){
+    renderMore();
+    $('#moreModal').classList.add('show');
   });
+  $('#closeMore').addEventListener('click', function(){ $('#moreModal').classList.remove('show'); });
+  $('#moreModal').addEventListener('click', function(e){ if(e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
+
+  /* ---------- resources ---------- */
+  var RESOURCES = [
+    { name: 'TSIA2 Standards', desc: ' THECB/College Board TSIA2 Math Test Specifications (v1.4)', url: 'https://reportcenter.highered.texas.gov/training-materials/tsia2-math-test-specifications-v1-4/' },
+    { name: 'TSIA2 Student Brochure', desc: ' Official College Board student informational brochure (PDF)', url: 'https://accuplacer.collegeboard.org/accuplacer/pdf/tsia2-student-informational-brochure.pdf' },
+    { name: 'TSIA2 Additional Resources', desc: ' College Board — more prep materials and practice', url: 'https://accuplacer.collegeboard.org/students/tsia2-additional-resources' }
+  ];
+  function resourceItemHTML(r, i){
+    return '<li><a class="moreItem" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+
+      '<span class="glyph">'+(i+1)+'</span>'+
+      '<span class="info"><span class="nm">'+esc(r.name)+'</span>'+
+        '<span class="ds">'+esc(r.desc||'')+'</span></span>'+
+      '<span class="go">Open →</span>'+
+    '</a></li>';
+  }
+  function renderResources(){
+    $('#resourcesList').innerHTML = RESOURCES.map(resourceItemHTML).join('');
+  }
+  $('#resourcesBtn').addEventListener('click', function(){
+    renderResources();
+    $('#resourcesModal').classList.add('show');
+  });
+  $('#closeResources').addEventListener('click', function(){ $('#resourcesModal').classList.remove('show'); });
+  $('#resourcesModal').addEventListener('click', function(e){ if(e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
 
   /* ---------- adaptive CRC practice test ----------
      Deliberately NOT a REGISTRY entry. It is a 20-item mixed-strand
