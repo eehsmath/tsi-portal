@@ -147,6 +147,34 @@
       '<div class="pct">'+Math.round(pct*100)+'%</div></div>';
   }
 
+  /* Per-standard node ring — same idea as ringSVG, sized for the bigger
+     68px node. Colored via the .node .track/.fill classes (inheriting
+     --accent from the .sec card), not an inline stroke, matching how
+     ringSVG already does it. */
+  function nodeRingSVG(pct){
+    var r = 30, C = 2*Math.PI*r, off = C*(1-pct);
+    return '<svg viewBox="0 0 68 68" aria-hidden="true">' +
+      '<circle class="track" cx="34" cy="34" r="'+r+'"></circle>' +
+      '<circle class="fill" cx="34" cy="34" r="'+r+'" stroke-dasharray="'+C+'" stroke-dashoffset="'+off+'"></circle>' +
+    '</svg>';
+  }
+  function nodeState(st){ return st.mastered ? 'mastered' : st.attempts ? 'started' : 'notstarted'; }
+  function nodeInnerHTML(st, i){
+    var state = nodeState(st);
+    if (state === 'mastered') return '&#10003;';
+    if (state === 'started') return nodeRingSVG(st.progress) + '<span class="pct">'+Math.round(st.progress*100)+'%</span>';
+    return String(i+1);
+  }
+
+  /* Which sections are expanded, keyed by section id — starts empty
+     (every section collapsed) on a fresh load, persists across re-renders
+     within the same visit (ID switch, guest start, pageshow). */
+  var expandedSections = {};
+  function toggleSection(id){
+    expandedSections[id] = !expandedSections[id];
+    render();
+  }
+
   function render(){
     var host = $('#sections');
     host.innerHTML = '';
@@ -155,36 +183,54 @@
     TSIPortal.SECTIONS.forEach(function(sec, si){
       var skills = TSIPortal.REGISTRY.filter(function(r){ return r.sec === sec.id; });
       var s = sum[sec.id];
+      var open = !!expandedSections[sec.id];
 
       var card = document.createElement('div');
       card.className = 'sec';
       card.style.setProperty('--accent', sec.accent);
 
       var html =
-        '<div class="head"><div>' +
+        '<div class="head'+(open?' is-open':'')+'" role="button" tabindex="0" aria-expanded="'+(open?'true':'false')+'"><div>' +
           '<div class="eyebrow">Section '+(si+1)+' · '+sec.code+'</div>' +
           '<h2>'+sec.name+'</h2>' +
           '<div class="mcount">'+s.mastered+' of '+s.readyCount+' standards polished</div>' +
-        '</div>' + ringSVG(s.progress, sec.accent) + '</div>';
+        '</div><div style="display:flex; align-items:center; gap:10px">' + ringSVG(s.progress, sec.accent) +
+          '<span class="chev" aria-hidden="true">&#9662;</span></div></div>';
 
-      html += '<ul class="path">';
+      // Collapsed: every node in one horizontal row — state visible at a glance.
+      html += '<div class="stripRow"'+(open?' hidden':'')+'>';
       skills.forEach(function(r, i){
         var st = TSIPortal.skill(r.id);
-        var cls = 'stone' + (st.mastered ? ' mastered' : st.attempts ? ' started' : '');
-        var dot = st.mastered ? '✓' : (i+1);
-        var meta = st.attempts ? st.attempts+' answered · '+Math.round(st.recentAcc*100)+'% recent' : 'not started';
-        var codeBadge = r.code ? '<span class="code">'+r.code+'</span> ' : '';
-        html += '<li><a class="'+cls+'" style="--accent:'+sec.accent+'" href="'+r.file+'?std='+r.id+'">' +
-          '<span class="dot">'+dot+'</span>' +
-          '<span class="info"><span class="nm">'+codeBadge+r.name+'</span>' +
-            '<span class="bar"><i style="width:'+Math.round(st.progress*100)+'%"></i></span>' +
-            '<span class="meta">'+meta+'</span></span>' +
+        html += '<a class="stripItem" href="'+r.file+'?std='+r.id+'">' +
+          '<div class="node '+nodeState(st)+'">'+nodeInnerHTML(st, i)+'</div>' +
+          '<span class="code">'+(r.code||r.id)+'</span>' +
+          '<div class="bubble">'+r.name+'</div>' +
+        '</a>';
+      });
+      html += '</div>';
+
+      // Expanded: same nodes, stacked, short title + state + hover detail.
+      html += '<ul class="listBig"'+(open?'':' hidden')+'>';
+      skills.forEach(function(r, i){
+        var st = TSIPortal.skill(r.id);
+        var stateLabel = st.mastered ? '<span class="state st-mastered">Polished &#10003;</span>'
+                        : st.attempts ? '<span class="state">'+st.attempts+' answered &middot; '+Math.round(st.recentAcc*100)+'% recent</span>'
+                        : '<span class="state">Not started</span>';
+        html += '<li><a class="rowBig" href="'+r.file+'?std='+r.id+'">' +
+          '<div class="node '+nodeState(st)+'">'+nodeInnerHTML(st, i)+'</div>' +
+          '<div class="info"><div class="nm">'+(r.code||r.id)+' &middot; '+(r.short||r.name)+'</div>'+stateLabel+'</div>' +
           '<span class="go">Practice</span>' +
+          '<div class="bubble">'+r.name+'</div>' +
         '</a></li>';
       });
       html += '</ul>';
 
       card.innerHTML = html;
+      var headEl = card.querySelector('.head');
+      headEl.addEventListener('click', function(){ toggleSection(sec.id); });
+      headEl.addEventListener('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleSection(sec.id); }
+      });
       host.appendChild(card);
     });
 
@@ -208,8 +254,11 @@
     TSIPortal.SECTIONS.forEach(function(s){ secByIdx[s.id] = s; });
     return TSIPortal.REGISTRY.map(function(r){
       var sec = secByIdx[r.sec];
+      /* hay stays built from the full official name (not the short display
+         title) so a search for "quadratic" or "probability" still finds
+         everything it used to — only what's shown changed, not what matches. */
       var hay = [r.code, r.name, sec ? sec.name : ''].join(' ').toLowerCase();
-      return { id: r.id, code: r.code, name: r.name, file: r.file,
+      return { id: r.id, code: r.code, name: r.name, short: r.short || r.name, file: r.file,
         accent: sec ? sec.accent : '#c2680c', secName: sec ? sec.name : '', hay: hay };
     });
   }
@@ -226,7 +275,7 @@
   function searchResultHTML(item){
     return '<li><a class="stone" style="--accent:'+item.accent+'" href="'+esc(item.file)+'?std='+esc(item.id)+'">' +
       '<span class="dot">→</span>' +
-      '<span class="info"><span class="nm"><span class="code">'+esc(item.code)+'</span> '+esc(item.name)+'</span>' +
+      '<span class="info"><span class="nm"><span class="code">'+esc(item.code)+'</span> '+esc(item.short)+'</span>' +
         '<span class="meta">'+esc(item.secName)+'</span></span>' +
       '<span class="go">Practice</span>' +
     '</a></li>';

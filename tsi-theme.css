@@ -104,7 +104,11 @@ body{
 .legend .note{margin-left:auto; font-weight:700}
 
 /* ---------- section grid (index page) ---------- */
-.grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+/* align-items:start (not the grid default "stretch") so an expanded
+   section can't force its still-collapsed neighbor in the same row to
+   grow to match height — that stretch previously showed as a tall blank
+   area under the neighbor's header, reading as a broken empty section. */
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start}
 @media (max-width:900px){ .grid{grid-template-columns:1fr} }
 
 .sec{
@@ -112,7 +116,13 @@ body{
   box-shadow:var(--shadow); padding:16px; display:flex; flex-direction:column;
   border-top:5px solid var(--accent);
 }
-.sec .head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px}
+.sec .head{
+  display:flex; justify-content:space-between; align-items:center; gap:12px;
+  margin:-8px -8px 6px; padding:8px; border-radius:14px; cursor:pointer;
+}
+.sec .head:hover{background:#fbf3e6}
+.sec .head .chev{font-size:20px; color:var(--muted); transition:transform .2s ease; flex:none}
+.sec .head.is-open .chev{transform:rotate(180deg)}
 .sec .eyebrow{font-size:12px; font-weight:900; letter-spacing:.8px; color:var(--muted); text-transform:uppercase}
 .sec h2{margin:2px 0 0; font-size:20px; font-weight:900}
 .sec .mcount{font-size:12px; font-weight:800; color:var(--muted); margin-top:3px}
@@ -122,6 +132,52 @@ body{
 .ring .track{fill:none; stroke:#f6ead8; stroke-width:8}
 .ring .fill{fill:none; stroke:var(--accent); stroke-width:8; stroke-linecap:round; transition:stroke-dashoffset .6s ease}
 .ring .pct{position:relative; top:-64px; height:64px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px}
+
+/* ---------- big path nodes (section cards only — search keeps .stone) ----------
+   The node itself now carries the mastery state (outline / filling ring /
+   solid checkmark), large enough to read at a glance; the row shrinks to a
+   short title, with the full official standard wording moved to a hover
+   tooltip instead of sitting on the page permanently. */
+.node{
+  width:68px; height:68px; flex:none; border-radius:50%; position:relative;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:900; font-size:18px; transition:background .3s, border-color .3s, color .3s;
+}
+.node.notstarted{background:#fff; border:4px solid #f6ead8; color:var(--muted)}
+.node.started{background:#fff; border:4px solid #f6ead8}
+.node.started svg{position:absolute; inset:-4px; transform:rotate(-90deg)}
+.node.started .track{fill:none; stroke:#f6ead8; stroke-width:6}
+.node.started .fill{fill:none; stroke:var(--accent); stroke-width:6; stroke-linecap:round; transition:stroke-dashoffset .6s ease}
+.node.started .pct{position:relative; font-size:13px; color:var(--accent)}
+.node.mastered{background:var(--accent); border:4px solid var(--accent); color:#fff}
+
+.bubble{
+  position:absolute; width:240px; max-width:70vw; background:var(--ink); color:#fff9ee;
+  font-size:12.5px; font-weight:700; line-height:1.45; padding:10px 12px; border-radius:10px;
+  opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease; z-index:5;
+}
+.stripItem .bubble{left:50%; bottom:calc(100% + 10px); transform:translateX(-50%) translateY(4px)}
+.stripItem:hover .bubble, .stripItem:focus-visible .bubble{opacity:1; transform:translateX(-50%) translateY(0)}
+.rowBig .bubble{left:0; bottom:calc(100% + 8px); transform:translateY(4px)}
+.rowBig:hover .bubble, .rowBig:focus-visible .bubble{opacity:1; transform:translateY(0)}
+
+/* collapsed: every node in one horizontal row, state still visible at a glance */
+.stripRow{list-style:none; margin:14px 0 0; padding:10px 4px 4px; position:relative; display:flex; gap:20px; flex-wrap:wrap}
+.stripRow::before{content:""; position:absolute; left:34px; right:34px; top:44px; height:3px; background:#f6ead8; border-radius:3px; z-index:0}
+.stripItem{position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:6px; text-decoration:none; color:inherit}
+.stripItem .code{font-size:11px; font-weight:900; color:var(--muted)}
+
+/* expanded: vertical list of the same big nodes, short title + state + hover detail */
+.listBig{list-style:none; margin:14px 0 4px; padding:0; position:relative}
+.listBig::before{content:""; position:absolute; left:34px; top:8px; bottom:8px; width:3px; background:#f6ead8; border-radius:3px}
+.listBig li{position:relative; margin-bottom:4px}
+.rowBig{display:flex; align-items:center; gap:16px; padding:8px 10px 8px 0; border-radius:14px; text-decoration:none; color:inherit; position:relative}
+.rowBig:hover{background:#fbf3e6}
+.rowBig .info{flex:1; min-width:0}
+.rowBig .nm{font-weight:800; font-size:15px}
+.rowBig .state{font-size:12px; font-weight:800; color:var(--muted); margin-top:2px}
+.rowBig .state.st-mastered{color:var(--ok)}
+.rowBig .go{flex:none; font-weight:900; color:var(--accent); font-size:13.5px; padding:8px 14px; border-radius:999px; border:1px solid var(--ui); background:#fff}
 
 /* ---------- stepping-stone path ---------- */
 .path{list-style:none; margin:10px 0 0; padding:0; position:relative}
