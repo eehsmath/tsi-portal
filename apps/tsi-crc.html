@@ -369,6 +369,7 @@ sup{font-size:.72em}
 
 <!-- ==================== TEST ==================== -->
 <section id="test" class="hidden">
+  <a class="back" href="../index.html" id="testExitLink" style="margin-bottom:6px">&larr; Back to TSI hub</a>
   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px">
     <p class="eyebrow" style="margin:0">Question <span id="qNum" class="mono">1</span> of 20</p>
     <p class="eyebrow" id="strandLabel" style="margin:0">&nbsp;</p>
@@ -1815,6 +1816,19 @@ function pause(){
 }
 $('pauseBtn').onclick = pause;
 $('pausedResumeBtn').onclick = () => { show('test'); serve(); };
+
+/* Same on-screen exit as the intro/paused screens, now visible mid-test too —
+   previously the only way out before finishing was the browser's own back
+   button. Signed-in students get their progress saved first, same as the
+   Save & finish later button; a guest has nothing to save, so this just
+   leaves (same loss they'd already get from closing the tab). */
+$('testExitLink').onclick = function(e){
+  if(PortalLink.canResume){
+    e.preventDefault();
+    PortalLink.saveResume(snapshot(SEED, MODE, PICKS), true);
+    window.location.href = '../index.html';
+  }
+};
 
 function serve(){
   const strand = nextStrand(S);
