@@ -10,13 +10,19 @@
    ===================================================================== */
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=Fredoka:wght@500;600;700&display=swap');
 :root{
-  --bg:#fdf6ec; --panel:#fff; --ui:#e8d7bd; --ink:#2a1f14; --muted:#8a7358;
+  /* Cool slate neutrals — the four section accents below (rust/wine/olive/
+     teal) are unchanged, only the warm cream page surface moved to a
+     cooler gray-blue. --track/--hover replace what used to be one-off warm
+     hex literals (#f6ead8/#fbf3e6/#ecdcc0/#fbeedd) scattered through the
+     front page's own rules, so those match the new neutral consistently. */
+  --bg:#eef1f5; --panel:#fff; --ui:#d7dee6; --ink:#1e2733; --muted:#64748b;
+  --track:#e2e7ee; --hover:#e8edf3;
   --rust:#c2680c;   /* primary accent + Geometric and Spatial Reasoning */
   --wine:#a3324a;   /* Algebraic Reasoning */
   --olive:#5f7a3d;  /* Quantitative Reasoning */
   --teal:#0f8b8d;   /* Probabilistic and Statistical Reasoning */
   --ok:#0b6b2f; --err:#b21f2d;
-  --shadow:0 8px 20px rgba(80,50,20,.08);
+  --shadow:0 8px 20px rgba(30,41,59,.10);
   --font-body:'Nunito', ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   --font-display:'Fredoka', ui-rounded, system-ui, sans-serif;
 }
@@ -44,7 +50,7 @@ body{
 .idBox{display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end}
 .idPill{
   display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:999px;
-  border:1px solid var(--ui); background:#fbf3e6; font-weight:900; font-size:15px; color:var(--ink);
+  border:1px solid var(--ui); background:var(--hover); font-weight:900; font-size:15px; color:var(--ink);
 }
 .idPill.guest{background:#fff8e8; border-color:#ffe38a; color:#7a5a00}
 .switchLink{
@@ -52,7 +58,7 @@ body{
   font-weight:900; font-size:12.5px; border-radius:999px; padding:7px 12px; cursor:pointer;
   font-family:inherit;
 }
-.switchLink:hover{color:var(--ink); border-color:#e0c99a}
+.switchLink:hover{color:var(--ink); border-color:var(--ui)}
 
 /* ---------- search ---------- */
 .searchRow{margin-top:12px; position:relative}
@@ -68,7 +74,7 @@ body{
   width:32px; height:32px; border-radius:50%; border:0; background:transparent;
   color:var(--muted); font-size:18px; font-weight:900; cursor:pointer; line-height:1;
 }
-.searchClear:hover{background:#fbf3e6; color:var(--ink)}
+.searchClear:hover{background:var(--hover); color:var(--ink)}
 .searchResultsWrap{
   background:var(--panel); border:1px solid var(--ui); border-radius:18px;
   box-shadow:var(--shadow); padding:16px 16px 6px; margin-bottom:14px;
@@ -103,7 +109,7 @@ body{
 .tag{font-size:10px; font-weight:900; letter-spacing:.5px; border-radius:999px; padding:2px 9px}
 .tag.port{color:#0b3f8f; background:#e6efff; border:1px solid #bcd0ff}
 .tag.partial{color:#7a5a00; background:#fff8e0; border:1px solid #ffe38a}
-.tag.newbuild{color:var(--muted); background:#f7efe2; border:1px solid var(--ui)}
+.tag.newbuild{color:var(--muted); background:var(--track); border:1px solid var(--ui)}
 .legend .note{margin-left:auto; font-weight:700}
 
 /* ---------- section grid (index page) ---------- */
@@ -123,7 +129,7 @@ body{
   display:flex; justify-content:space-between; align-items:center; gap:12px;
   margin:-8px -8px 6px; padding:8px; border-radius:14px; cursor:pointer;
 }
-.sec .head:hover{background:#fbf3e6}
+.sec .head:hover{background:var(--hover)}
 .sec .head .chev{font-size:20px; color:var(--muted); transition:transform .2s ease; flex:none}
 .sec .head.is-open .chev{transform:rotate(180deg)}
 .sec .eyebrow{font-family:var(--font-display); font-size:12px; font-weight:600; letter-spacing:.8px; color:var(--muted); text-transform:uppercase}
@@ -132,7 +138,7 @@ body{
 
 .ring{width:64px; height:64px; flex:none}
 .ring svg{width:64px; height:64px; transform:rotate(-90deg)}
-.ring .track{fill:none; stroke:#f6ead8; stroke-width:8}
+.ring .track{fill:none; stroke:var(--track); stroke-width:8}
 .ring .fill{fill:none; stroke:var(--accent); stroke-width:8; stroke-linecap:round; transition:stroke-dashoffset .6s ease}
 .ring .pct{position:relative; top:-64px; height:64px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px}
 
@@ -147,10 +153,10 @@ body{
   font-family:var(--font-display); font-weight:600; font-size:18px;
   transition:background .3s, border-color .3s, color .3s;
 }
-.node.notstarted{background:#fff; border:4px solid #f6ead8; color:var(--muted)}
-.node.started{background:#fff; border:4px solid #f6ead8}
+.node.notstarted{background:#fff; border:4px solid var(--track); color:var(--muted)}
+.node.started{background:#fff; border:4px solid var(--track)}
 .node.started svg{position:absolute; inset:-4px; transform:rotate(-90deg)}
-.node.started .track{fill:none; stroke:#f6ead8; stroke-width:6}
+.node.started .track{fill:none; stroke:var(--track); stroke-width:6}
 .node.started .fill{fill:none; stroke:var(--accent); stroke-width:6; stroke-linecap:round; transition:stroke-dashoffset .6s ease}
 .node.started .pct{position:relative; font-size:13px; color:var(--accent)}
 .node.mastered{background:var(--accent); border:4px solid var(--accent); color:#fff}
@@ -166,18 +172,23 @@ body{
 .rowBig:hover .bubble, .rowBig:focus-visible .bubble{opacity:1; transform:translateY(0)}
 
 /* collapsed: every node in one horizontal row, state still visible at a glance */
-.stripRow{list-style:none; margin:14px 0 0; padding:10px 4px 4px; position:relative; display:flex; gap:20px; flex-wrap:wrap}
+/* No flex-wrap: every item shares the row's width equally (flex:1 1 0), so
+   a 7-standard section (QR, GSR) divides that same row into 7 narrower
+   slots instead of wrapping to a second row — the node below is capped at
+   68px so a 5- or 6-item row doesn't grow past the size that reads well. */
+.stripRow{list-style:none; margin:14px 0 0; padding:10px 4px 4px; position:relative; display:flex; gap:14px}
 .stripRow[hidden]{display:none}
-.stripRow::before{content:""; position:absolute; left:34px; right:34px; top:44px; height:3px; background:#f6ead8; border-radius:3px; z-index:0}
-.stripItem{position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:6px; text-decoration:none; color:inherit}
+.stripRow::before{content:""; position:absolute; left:34px; right:34px; top:44px; height:3px; background:var(--track); border-radius:3px; z-index:0}
+.stripItem{position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:6px; text-decoration:none; color:inherit; flex:1 1 0; min-width:0}
+.stripItem .node{width:100%; max-width:68px; height:auto; aspect-ratio:1}
 .stripItem .code{font-size:11px; font-weight:900; color:var(--muted)}
 
 /* expanded: vertical list of the same big nodes, short title + state + hover detail */
 .listBig{list-style:none; margin:14px 0 4px; padding:0; position:relative}
-.listBig::before{content:""; position:absolute; left:34px; top:8px; bottom:8px; width:3px; background:#f6ead8; border-radius:3px}
+.listBig::before{content:""; position:absolute; left:34px; top:8px; bottom:8px; width:3px; background:var(--track); border-radius:3px}
 .listBig li{position:relative; margin-bottom:4px}
 .rowBig{display:flex; align-items:center; gap:16px; padding:8px 10px 8px 0; border-radius:14px; text-decoration:none; color:inherit; position:relative}
-.rowBig:hover{background:#fbf3e6}
+.rowBig:hover{background:var(--hover)}
 .rowBig .info{flex:1; min-width:0}
 .rowBig .nm{font-weight:800; font-size:15px}
 .rowBig .state{font-size:12px; font-weight:800; color:var(--muted); margin-top:2px}
@@ -191,18 +202,18 @@ body{
 .stateLegend{display:flex; gap:18px; flex-wrap:wrap; margin:0 0 14px 2px; font-size:12px; font-weight:800; color:var(--muted)}
 .stateLegend span{display:inline-flex; align-items:center; gap:6px}
 .stateLegend i{width:12px; height:12px; border-radius:50%; display:inline-block}
-.stateLegend i.notstarted{background:#fff; border:2px solid #f6ead8}
+.stateLegend i.notstarted{background:#fff; border:2px solid var(--track)}
 .stateLegend i.started{background:#fff; border:2px solid var(--rust)}
 .stateLegend i.mastered{background:var(--rust)}
 
 /* ---------- stepping-stone path ---------- */
 .path{list-style:none; margin:10px 0 0; padding:0; position:relative}
-.path::before{content:""; position:absolute; left:19px; top:14px; bottom:14px; width:0; border-left:3px dotted #ecdcc0}
+.path::before{content:""; position:absolute; left:19px; top:14px; bottom:14px; width:0; border-left:3px dotted var(--track)}
 .stone{position:relative; display:flex; align-items:center; gap:12px; padding:7px 8px 7px 0; border-radius:12px; text-decoration:none; color:inherit}
-a.stone:hover{background:#fbf3e6}
+a.stone:hover{background:var(--hover)}
 .stone .dot{
   width:40px; height:40px; flex:none; border-radius:50%;
-  border:3px solid #ecdcc0; background:#fff; z-index:1;
+  border:3px solid var(--track); background:#fff; z-index:1;
   display:flex; align-items:center; justify-content:center;
   font-weight:900; font-size:15px; color:var(--muted);
   transition:background .3s, border-color .3s, color .3s;
@@ -212,8 +223,8 @@ a.stone:hover{background:#fbf3e6}
 .stone .info{flex:1; min-width:0}
 .stone .nm{font-weight:800; font-size:13.5px; line-height:1.4}
 .stone .code{display:inline-block; font-weight:900; font-size:12px; color:var(--accent);
-  background:#fbeedd; border:1px solid var(--ui); border-radius:6px; padding:1px 7px; margin-right:6px; vertical-align:1px}
-.stone .bar{height:6px; border-radius:999px; background:#f6ead8; margin-top:5px; overflow:hidden; max-width:260px}
+  background:var(--track); border:1px solid var(--ui); border-radius:6px; padding:1px 7px; margin-right:6px; vertical-align:1px}
+.stone .bar{height:6px; border-radius:999px; background:var(--track); margin-top:5px; overflow:hidden; max-width:260px}
 .stone .bar i{display:block; height:100%; border-radius:999px; background:var(--accent); transition:width .5s ease}
 .stone .meta{font-size:11.5px; font-weight:800; color:var(--muted); margin-top:3px}
 .stone .go{flex:none; font-weight:900; color:var(--accent); font-size:14px; padding:6px 12px; border-radius:999px; border:1px solid var(--ui); background:#fff}
@@ -229,18 +240,18 @@ a.stone:hover{background:#fbf3e6}
 .modalCard{margin:24px 0; width:min(860px,96vw); background:#fff; border:1px solid var(--ui);
   border-radius:24px; box-shadow:0 40px 80px rgba(40,20,5,.25)}
 .modalHead{display:flex; justify-content:space-between; align-items:center; gap:10px;
-  padding:16px 20px; border-bottom:1px dashed #ece0cc}
+  padding:16px 20px; border-bottom:1px dashed var(--ui)}
 .modalHead h3{margin:0; font-family:var(--font-display); font-size:20px; font-weight:600}
 .modalBody{padding:18px 20px}
 table{width:100%; border-collapse:collapse; font-size:14px}
 th{text-align:left; font-size:11px; letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
-  padding:8px 10px; border-bottom:2px solid #f6ead8}
+  padding:8px 10px; border-bottom:2px solid var(--track)}
 td{padding:9px 10px; border-bottom:1px solid #f8f1e4; font-weight:800}
 td.num{font-variant-numeric:tabular-nums}
 .chip-ok{color:var(--ok); background:#eafff2; border:1px solid #bfeacc; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900}
 .chip-prog{color:#7a5a00; background:#fff9d6; border:1px solid #ffe38a; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900}
-.chip-none{color:var(--muted); background:#f7efe2; border:1px solid var(--ui); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900}
-tr.std-row td{background:#fbf3e6}
+.chip-none{color:var(--muted); background:var(--track); border:1px solid var(--ui); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900}
+tr.std-row td{background:var(--hover)}
 tr.std-row td:first-child{border-left:3px solid var(--rust)}
 tr.se-row td{padding-top:5px; padding-bottom:5px; font-size:12.5px; color:var(--muted); border-bottom:1px dashed #f8f1e4}
 tr.se-row td.se-label{padding-left:32px; font-weight:800; color:var(--ink)}
@@ -281,7 +292,7 @@ td.num.muted, td.muted{color:var(--muted); font-weight:700}
 .modeBlock{border:2px solid var(--ui); border-radius:16px; padding:16px; margin-bottom:0; background:#fdf8f0}
 .modeBlock h4{margin:0 0 4px; font-size:16px; font-weight:900}
 .modeBlock .hint{color:var(--muted); font-weight:700; font-size:13px; margin:0 0 12px}
-.modeBlock-id{border-color:#e6c78f; background:#fbf3e6}
+.modeBlock-id{border-color:var(--ui); background:var(--hover)}
 .modeBlock-guest{border-color:#ffdb8a; background:#fffaf0}
 .modeBlock-guest h4{color:#8a5b00}
 .guest-btn{border-color:#ffdb8a; background:#fff3d6; color:#7a5100}
