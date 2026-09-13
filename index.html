@@ -107,15 +107,6 @@
         <thead id="repHead"></thead>
         <tbody id="repRows"></tbody>
       </table>
-      <div class="codeBox noprint">
-        <div style="flex:1">
-          <div style="font-size:11px; font-weight:900; letter-spacing:.5px; color:var(--muted); text-transform:uppercase; margin-bottom:5px">
-            Backup only — progress already saves automatically to your ID
-          </div>
-          <textarea id="repCode" readonly aria-label="Backup code"></textarea>
-        </div>
-        <button class="btn info" id="copyCode">Copy code</button>
-      </div>
     </div>
   </div>
 </div>
@@ -668,7 +659,6 @@
   var _view = 'summary';
   function openReport(){
     $('#repName').textContent = TSIPortal.studentName() ? '· '+TSIPortal.studentName() : '';
-    $('#repCode').value = TSIPortal.reportCode();
     renderReport(_view);
     $('#reportModal').classList.add('show');
   }
@@ -683,13 +673,6 @@
   });
   $('#printBtn').addEventListener('click', function(){ window.print(); });
   $('#csvBtn').addEventListener('click', downloadStudentCSV);
-
-  $('#copyCode').addEventListener('click', function(){
-    var ta = $('#repCode'); ta.select();
-    try{ navigator.clipboard.writeText(ta.value); }catch(e){ document.execCommand('copy'); }
-    $('#copyCode').textContent = 'Copied ✓';
-    setTimeout(function(){ $('#copyCode').textContent = 'Copy code'; }, 1500);
-  });
 
   /* ---------- init ---------- */
   function init(){
