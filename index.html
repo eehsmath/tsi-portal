@@ -431,7 +431,7 @@
       return '<tr>'+
         '<th>Skill</th>'+
         '<th>Total Attempts</th><th>Total Correct</th><th>Overall</th>'+
-        '<th>Recent 10</th><th>Hints</th><th>Level</th>'+
+        '<th>Recent 10</th><th>Hints</th><th>Level</th><th>Types</th>'+
         '<th>Att. to Mastery</th><th>Last Active</th><th>Status</th></tr>';
     }
     return '<tr>'+
@@ -459,6 +459,7 @@
       var atm = (st.attemptsToMastery != null) ? st.attemptsToMastery : '—';
       var lv  = st.level || 1;
       var hints = st.hints || 0;
+      var types = st.variantsTotal ? (st.variantsSeen+'/'+st.variantsTotal) : '—';
       return '<tr class="'+cls+'">'+labelCell+
         '<td class="num">'+st.attempts+'</td>'+
         '<td class="num">'+(st.attempts ? st.correct : '—')+'</td>'+
@@ -466,6 +467,7 @@
         '<td class="num">'+recent+'</td>'+
         '<td class="num">'+hints+'</td>'+
         '<td class="num">'+lv+'</td>'+
+        '<td class="num">'+types+'</td>'+
         '<td class="num">'+atm+'</td>'+
         '<td class="num muted">'+last+'</td>'+
         '<td>'+statusChip(st)+'</td></tr>';
@@ -480,7 +482,7 @@
   }
 
   function colspan(view){
-    if (view === 'detail') return 10;
+    if (view === 'detail') return 11;
     if (view === 'tests')  return 8;
     return 7;
   }
@@ -591,7 +593,7 @@
     var headers = ['id','name','level','skill_kind','skill_id','skill_name',
       'source','on_crc',
       'total_attempts','total_correct','overall_accuracy','recent_10_accuracy',
-      'hints','current_level','attempts_to_mastery','last_active','status'];
+      'hints','current_level','types_seen','types_total','attempts_to_mastery','last_active','status'];
     var lines = [headers.map(csvEscape).join(',')];
     function statusText(st){
       if (!st.attempts) return 'Not started';
@@ -605,7 +607,7 @@
         st.attempts, st.attempts?st.correct:'',
         st.attempts?(st.correct/st.attempts).toFixed(4):'',
         st.attempts?st.recentAcc.toFixed(4):'',
-        st.hints||0, st.level||1,
+        st.hints||0, st.level||1, st.variantsSeen||0, st.variantsTotal||0,
         (st.attemptsToMastery != null ? st.attemptsToMastery : ''),
         fmtDate(st.last), statusText(st)
       ].map(csvEscape).join(','));
@@ -618,7 +620,7 @@
             mst.attempts, mst.attempts?mst.correct:'',
             mst.attempts?(mst.correct/mst.attempts).toFixed(4):'',
             mst.attempts?mst.recentAcc.toFixed(4):'',
-            mst.hints||0, mst.level||1,
+            mst.hints||0, mst.level||1, mst.variantsSeen||0, mst.variantsTotal||0,
             (mst.attemptsToMastery != null ? mst.attemptsToMastery : ''),
             fmtDate(mst.last), statusText(mst)
           ].map(csvEscape).join(','));

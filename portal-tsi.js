@@ -440,9 +440,17 @@
     };
   }
 
+  /* Almost every TSI standard has exactly one module (its own id), so this
+     is the path a single skill's stats actually flow through on their way
+     to the UI — computeStats' new variantsSeen/variantsTotal/variantsNeeded
+     have to be carried through here too, or "Types" would show a dash for
+     every TSI standard regardless of real tracking underneath. Summed
+     across modules like attempts/hints already are; for the ids.length===1
+     case (the norm) that sum is just that one module's own numbers. */
   function aggregateModules(d, ids) {
     var attempts = 0, correct = 0, progSum = 0, masteredCount = 0,
-        accSum = 0, accN = 0, last = 0, hints = 0;
+        accSum = 0, accN = 0, last = 0, hints = 0,
+        variantsSeen = 0, variantsTotal = 0, variantsNeeded = 0;
     ids.forEach(function (mid) {
       var st = computeStats(d.skills[mid]);
       attempts += st.attempts; correct += st.correct; progSum += st.progress;
@@ -450,6 +458,7 @@
       if (st.attempts) { accSum += st.recentAcc; accN += 1; }
       if (st.last > last) last = st.last;
       hints += st.hints;
+      variantsSeen += st.variantsSeen; variantsTotal += st.variantsTotal; variantsNeeded += st.variantsNeeded;
     });
     var n = ids.length || 1;
     return {
@@ -458,7 +467,8 @@
       mastered: ids.length > 0 && masteredCount === ids.length,
       progress: progSum / n,
       level: 1, last: last, hints: hints,
-      modulesMastered: masteredCount, moduleCount: ids.length
+      modulesMastered: masteredCount, moduleCount: ids.length,
+      variantsSeen: variantsSeen, variantsTotal: variantsTotal, variantsNeeded: variantsNeeded
     };
   }
 
