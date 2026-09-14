@@ -133,6 +133,11 @@ body{
 .sec .head:hover{background:var(--hover)}
 .sec .head .chev{font-size:20px; color:var(--muted); transition:transform .2s ease; flex:none}
 .sec .head.is-open .chev{transform:rotate(180deg)}
+.expandHint{
+  display:inline-block; font-size:11px; font-weight:900; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--accent); background:var(--hover); border:1px solid var(--ui); border-radius:999px;
+  padding:5px 11px; white-space:nowrap;
+}
 .sec .eyebrow{font-family:var(--font-display); font-size:12px; font-weight:600; letter-spacing:.8px; color:var(--muted); text-transform:uppercase}
 .sec h2{margin:2px 0 0; font-family:var(--font-display); font-size:20px; font-weight:600}
 .sec .mcount{font-size:12px; font-weight:800; color:var(--muted); margin-top:3px}

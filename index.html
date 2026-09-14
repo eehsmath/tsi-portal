@@ -225,6 +225,7 @@
           '<h2>'+sec.name+'</h2>' +
           '<div class="mcount">'+s.mastered+' of '+s.readyCount+' standards polished</div>' +
         '</div><div style="display:flex; align-items:center; gap:10px">' + ringSVG(s.progress, sec.accent) +
+          '<span class="expandHint">'+(open?'Hide standards':'See standards')+'</span>' +
           '<span class="chev" aria-hidden="true">&#9662;</span></div></div>';
 
       // Collapsed: every node in one horizontal row — state visible at a glance.
