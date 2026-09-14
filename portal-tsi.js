@@ -272,6 +272,13 @@
   /*  Entry shape (written by apps/tsi-crc.html):                        */
   /*    { t, code, score, ready, right, n, mode, s:{AR:[c,n], QR:[c,n],  */
   /*      PSR:[c,n], GSR:[c,n]} }                                        */
+  /*                                                                     */
+  /*  Shared by every practice test on the site (CRC, and now the        */
+  /*  ACT/SAT module) in one array, tagged by entry.kind so each test's   */
+  /*  history and summary stay separate. An entry with no `kind` is a    */
+  /*  pre-ACT/SAT CRC record — every existing caller keeps working       */
+  /*  unchanged, and testLog()/testSummary() default to kind:'CRC' so    */
+  /*  old call sites (index.html) don't need to change.                  */
   /* ================================================================== */
   var MAX_TESTS = 40;
 
@@ -286,14 +293,17 @@
     return log.slice();
   }
 
-  function testLog() {
+  function entryKind(e) { return e.kind || 'CRC'; }
+
+  function testLog(kind) {
+    kind = kind || 'CRC';
     var d = load();
-    return (d.tests || []).slice();
+    return (d.tests || []).filter(function (e) { return entryKind(e) === kind; });
   }
 
-  /* Roll-up over the whole log, for the hub report. */
-  function testSummary() {
-    var log = testLog();
+  /* Roll-up over one test's log, for the hub report. */
+  function testSummary(kind) {
+    var log = testLog(kind);
     if (!log.length) return { count: 0 };
     var scores = log.map(function (e) { return e.score; });
     var last = log[log.length - 1];
@@ -340,10 +350,24 @@
   /*  to rebuild the session, so nothing about the questions themselves  */
   /*  is stored here.                                                    */
   /* ================================================================== */
-  function saveResume(snap, flush) {
+  /* One slot per test kind ('CRC', 'ACT', 'SAT', ...) so starting an ACT
+     practice test does not clobber an unfinished CRC one. Old data has a
+     flat d.resume (pre-dates any kind besides CRC) — migrateLegacyResume()
+     lifts it into d.resumeK.CRC once, on first read, and nothing writes
+     the flat field again after that. */
+  function migrateLegacyResume(d) {
+    if (d.resume && !(d.resumeK && d.resumeK.CRC)) {
+      d.resumeK = d.resumeK || {};
+      d.resumeK.CRC = d.resume;
+    }
+  }
+
+  function saveResume(snap, flush, kind) {
+    kind = kind || 'CRC';
     if (currentMode() !== 'student') return false;
     var d = load();
-    d.resume = snap || null;
+    if (!d.resumeK) d.resumeK = {};
+    d.resumeK[kind] = snap || null;
     save(d);
     if (flush) flushSync(); else schedulePush();
     return true;
@@ -355,10 +379,12 @@
      from Friday. Set to 0 to disable expiry entirely. */
   var RESUME_MAX_AGE_DAYS = 14;
 
-  function getResume() {
+  function getResume(kind) {
+    kind = kind || 'CRC';
     if (currentMode() !== 'student') return null;
     var d = load();
-    var r = d.resume;
+    migrateLegacyResume(d);
+    var r = d.resumeK && d.resumeK[kind];
     if (!r) return null;
     if (r.cleared) return null;      // tombstone — see clearResume()
 
@@ -369,7 +395,7 @@
        (Date.now() - r.at) > RESUME_MAX_AGE_DAYS * 86400000);
 
     if (stale) {
-      delete d.resume;          // reap it so it stops syncing to the sheet
+      delete d.resumeK[kind];   // reap it so it stops syncing to the sheet
       save(d);
       schedulePush();
       return null;
@@ -377,10 +403,12 @@
     return r;
   }
 
-  function clearResume(flush) {
+  function clearResume(flush, kind) {
+    kind = kind || 'CRC';
     if (currentMode() !== 'student') return false;
     var d = load();
-    if (!d.resume || d.resume.cleared) return false;
+    migrateLegacyResume(d);
+    if (!d.resumeK || !d.resumeK[kind] || d.resumeK[kind].cleared) return false;
 
     /* Write a dated tombstone instead of deleting outright. The server merges
        the two copies by picking whichever has the later `at`, so a plain
@@ -388,7 +416,7 @@
        the sheet — the finished test would come back as resumable. A tombstone
        is newer than the snapshot it replaces, so it wins and the resume goes
        away everywhere. It expires on the normal schedule below. */
-    d.resume = { cleared: true, at: Date.now() };
+    d.resumeK[kind] = { cleared: true, at: Date.now() };
     save(d);
     if (flush) flushSync(); else schedulePush();
     return true;

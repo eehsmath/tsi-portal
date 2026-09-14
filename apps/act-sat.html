@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACT &amp; SAT Math &mdash; Practice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* Same paper/ballpoint/red-pen family as apps/tsi-crc.html, so this reads
+   as part of the same site. ACT gets a navy badge, SAT a violet one --
+   everything else (ink, rule, choices, cards) is shared. */
+:root{
+  --paper:      #F6F9FC;
+  --paper-2:    #FFFFFF;
+  --grid:       #E1EBF3;
+  --grid-major: #CFDEEB;
+  --ink:        #14263A;
+  --ink-soft:   #5C7488;
+  --ink-faint:  #92A6B6;
+  --rule:       #C9D8E4;
+  --pen:        #D42248;
+  --check:      #0C7F58;
+  --blue:       #2C58A6;
+  --blue-soft:  #E7EEF9;
+  --amber:      #C97B04;
+
+  --alg:  #2C58A6;
+  --fun:  #6B3FA0;
+  --geo:  #0C7F58;
+  --stat: #B5581F;
+
+  --act:  #143C7A;
+  --act-soft: #E8EEF9;
+  --sat:  #5B2A86;
+  --sat-soft: #F0E9F7;
+
+  --f-display: 'Archivo', system-ui, -apple-system, sans-serif;
+  --f-body:    'Public Sans', system-ui, -apple-system, sans-serif;
+  --f-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --r: 3px;
+  --shadow: 0 1px 0 var(--grid-major), 0 6px 18px -12px rgba(20,38,58,.4);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--f-body); color:var(--ink); background-color:var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size:22px 22px; line-height:1.5; -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:820px;margin:0 auto;padding:20px 16px 110px}
+
+h1,h2,h3{font-family:var(--f-display);margin:0;letter-spacing:-.015em}
+h1{font-size:clamp(26px,5.2vw,38px);font-weight:700;line-height:1.08}
+h2{font-size:clamp(19px,3.4vw,24px);font-weight:700}
+h3{font-size:15px;font-weight:600}
+
+.eyebrow{font-family:var(--f-display);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-soft)}
+.small{font-size:13.5px}
+.tiny{font-size:12px}
+
+.card{background:var(--paper-2);border:1px solid var(--rule);border-radius:var(--r);padding:20px;box-shadow:var(--shadow)}
+.card + .card{margin-top:14px}
+hr.rule{border:0;border-top:1px solid var(--rule);margin:20px 0}
+
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--f-display);font-weight:600;font-size:15px;padding:12px 22px;border-radius:var(--r);border:1px solid var(--blue);background:var(--blue);color:#fff;transition:background .12s,transform .06s}
+.btn:hover{background:#24488a}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{background:var(--ink-faint);border-color:var(--ink-faint);cursor:not-allowed;transform:none}
+.btn-ghost{background:transparent;color:var(--blue);border-color:var(--rule)}
+.btn-ghost:hover{background:var(--blue-soft)}
+.btn-sm{padding:8px 14px;font-size:13px}
+:focus-visible{outline:2.5px solid var(--amber);outline-offset:2px}
+
+/* ---------- exam picker ---------- */
+.examPick{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.examPick{grid-template-columns:1fr}}
+.examCard{border:1.5px solid var(--rule);border-radius:6px;padding:16px;text-align:left;background:var(--paper-2);cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.examCard:hover{box-shadow:0 6px 18px -10px rgba(20,38,58,.35)}
+.examCard.sel{border-color:var(--sel,var(--blue));box-shadow:inset 0 0 0 1.5px var(--sel,var(--blue))}
+.examCard .badge{display:inline-block;font-family:var(--f-display);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:var(--r);color:#fff;margin-bottom:8px}
+.examCard[data-exam="ACT"] .badge{background:var(--act)}
+.examCard[data-exam="SAT"] .badge{background:var(--sat)}
+.examCard h3{margin:0 0 6px}
+.examCard p{margin:0;font-size:13px;color:var(--ink-soft);line-height:1.55}
+.examCard ul{margin:10px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-soft)}
+.examCard ul li{margin:3px 0}
+
+/* ---------- strand chips ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--rule);border-radius:var(--r);padding:6px 11px;font-size:12.5px;background:var(--paper-2)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.d-alg{background:var(--alg)} .d-fun{background:var(--fun)} .d-geo{background:var(--geo)} .d-stat{background:var(--stat)}
+
+/* ---------- progress ticks ---------- */
+.ticks{display:flex;gap:3px;align-items:flex-end;height:16px}
+.tick{flex:1;height:6px;background:var(--grid-major);border-radius:1px;transition:height .2s,background .2s}
+.tick.done{height:12px;background:var(--ink-soft)}
+.tick.now{height:16px;background:var(--amber)}
+.moduleTag{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-display);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:var(--r);color:#fff}
+
+/* ---------- question ---------- */
+.qhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.stem{font-size:17px;line-height:1.55;margin:0 0 16px}
+.stem .mono{font-size:16.5px}
+.figure{margin:0 0 18px;text-align:center}
+.figure svg{max-width:100%;height:auto}
+
+.choices{display:grid;gap:9px}
+.choice{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;padding:13px 15px;border:1px solid var(--rule);border-radius:var(--r);background:var(--paper-2);font-size:16px;color:var(--ink);transition:border-color .12s,background .12s}
+.choice:hover{border-color:var(--blue);background:var(--blue-soft)}
+.choice .lab{font-family:var(--f-display);font-weight:700;font-size:13px;width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;border:1.5px solid var(--rule);color:var(--ink-soft);margin-top:1px}
+.choice.sel{border-color:var(--blue);background:var(--blue-soft);box-shadow:inset 0 0 0 1px var(--blue)}
+.choice.sel .lab{background:var(--blue);border-color:var(--blue);color:#fff}
+.choice.correct{border-color:var(--check);background:#EAF6F1}
+.choice.correct .lab{background:var(--check);border-color:var(--check);color:#fff}
+.choice.wrong{border-color:var(--pen);background:#FCEDF0}
+.choice.wrong .lab{background:var(--pen);border-color:var(--pen);color:#fff}
+.choice:disabled{cursor:default}
+.choice:disabled:hover{border-color:var(--rule);background:var(--paper-2)}
+.choice.sel:disabled:hover{border-color:var(--blue);background:var(--blue-soft)}
+.choice.correct:disabled:hover{border-color:var(--check);background:#EAF6F1}
+.choice.wrong:disabled:hover{border-color:var(--pen);background:#FCEDF0}
+
+.feedback{margin-top:14px;padding:14px 16px;border-radius:var(--r);font-size:14.5px;line-height:1.6}
+.fb-ok{background:#EAF6F1;border-left:3px solid var(--check)}
+.fb-no{background:#FCEDF0;border-left:3px solid var(--pen)}
+.feedback b{font-family:var(--f-display)}
+.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+
+/* ---------- score dial (ACT 1-36 / SAT 200-800) ---------- */
+.rail-block{margin:26px 0 8px}
+.rail{position:relative;height:46px;border:1px solid var(--rule);border-radius:var(--r);background:repeating-linear-gradient(90deg, var(--grid) 0 1px, transparent 1px 100%) 0 0/12.5% 100%, linear-gradient(90deg,#F0F5FA,#FFFFFF)}
+.rail-fill{position:absolute;top:0;bottom:0;left:0;width:0;background:linear-gradient(90deg,rgba(44,88,166,.10),rgba(44,88,166,.28));border-right:2.5px solid var(--blue);transition:width 1.5s cubic-bezier(.22,1,.36,1)}
+.rail-scale{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px;color:var(--ink-faint);margin-top:6px}
+.score-big{font-family:var(--f-mono);font-weight:700;font-size:clamp(42px,10vw,64px);line-height:1;letter-spacing:-.03em}
+.score-of{font-family:var(--f-mono);font-size:15px;color:var(--ink-faint)}
+.verdict{font-family:var(--f-display);font-weight:700;font-size:clamp(15px,3vw,18px);margin-top:6px;color:var(--ink-soft)}
+
+/* ---------- strand rails ---------- */
+.strand{padding:14px 0;border-top:1px solid var(--rule)}
+.strand:first-of-type{border-top:0}
+.strand-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
+.strand-name{font-family:var(--f-display);font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px}
+.band{font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:3px 9px;border-radius:var(--r);border:1px solid currentColor}
+.b-adv{color:var(--check)} .b-pro{color:var(--blue)} .b-bas{color:var(--pen)}
+.sbar{height:9px;background:var(--grid-major);border-radius:1px;overflow:hidden}
+.sbar > i{display:block;height:100%;width:0;transition:width 1s cubic-bezier(.22,1,.36,1)}
+.strand-meta{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-soft);margin-top:6px;gap:10px;flex-wrap:wrap}
+
+/* ---------- review ---------- */
+.rev{border-top:1px solid var(--rule);padding:16px 0}
+.rev-top{display:flex;gap:10px;align-items:baseline;margin-bottom:8px;flex-wrap:wrap}
+.mark{font-family:var(--f-display);font-weight:700;font-size:12px;padding:2px 8px;border-radius:var(--r);color:#fff;flex:none}
+.m-ok{background:var(--check)} .m-no{background:var(--pen)}
+.rev details{margin-top:8px}
+.rev summary{cursor:pointer;font-size:13.5px;color:var(--blue);font-weight:500}
+.rev .sol{margin-top:9px;padding:12px 14px;background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);font-size:14px;line-height:1.65}
+
+table.dt{border-collapse:collapse;margin:0 auto;font-size:14px;font-family:var(--f-body)}
+table.dt th,table.dt td{border:1px solid var(--rule);padding:6px 13px;text-align:center}
+table.dt td.num,table.dt th.num{font-family:var(--f-mono)}
+table.dt th{background:var(--paper);font-family:var(--f-display);font-weight:600;font-size:13px}
+table.dt td.mono,table.dt th.mono{font-family:var(--f-mono)}
+
+.toggle{display:flex;gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;width:fit-content}
+.toggle button{padding:9px 16px;border:0;background:var(--paper-2);color:var(--ink-soft);font-family:var(--f-display);font-weight:600;font-size:13.5px}
+.toggle button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:13.5px}
+.kv dt{color:var(--ink-soft)} .kv dd{margin:0;font-family:var(--f-mono)}
+.note{font-size:12.5px;color:var(--ink-soft);line-height:1.6;border-left:2px solid var(--grid-major);padding-left:12px}
+.hidden{display:none !important}
+.back{display:inline-block;margin-bottom:18px;font-family:var(--f-display);font-weight:600;font-size:13px;color:var(--blue);text-decoration:none}
+.back:hover{text-decoration:underline}
+.seedbox{font-family:var(--f-mono);font-size:12px;background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:8px 11px;word-break:break-all}
+sup{font-size:.72em}
+
+/* ---------- top-level portal header (peer of the TSI and Algebra 1 hubs) ---------- */
+.topHdr{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.topHdrRight{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:2px}
+.switchNav{font-size:12px;font-weight:600;color:var(--ink-faint);margin-top:8px}
+.switchNav a{color:var(--blue);text-decoration:none;font-weight:600}
+.switchNav a:hover{text-decoration:underline}
+.idBox{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.idPill{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--paper);font-weight:600;font-size:12.5px;color:var(--ink);white-space:nowrap}
+.idPill.guest{background:#FFF6E5;border-color:#F0D48A;color:#7a5a00}
+.switchLink{border:1px solid var(--rule);background:#fff;color:var(--ink-soft);font-weight:600;font-size:12px;border-radius:999px;padding:6px 11px;cursor:pointer;font-family:inherit}
+.switchLink:hover{color:var(--ink);border-color:var(--blue)}
+
+/* ---------- modals (identity gate + score history) ---------- */
+.modal{position:fixed;inset:0;background:rgba(20,38,58,.55);display:none;align-items:center;justify-content:center;z-index:2000;padding:20px}
+.modal.show{display:flex}
+.modalCard{background:var(--paper-2);border-radius:8px;max-width:640px;width:100%;max-height:86vh;overflow:auto;box-shadow:0 30px 80px -20px rgba(0,0,0,.5)}
+.modalHead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--rule)}
+.modalHead h3{margin:0}
+.modalBody{padding:20px}
+
+/* ============================================================
+   DESMOS TESTING CALCULATOR
+   The real ACT and digital SAT both allow a calculator through the
+   whole math section, and both use Desmos's own testing-mode build --
+   not the free desmos.com/calculator page, which has extra features
+   (accounts, saving, importing images) the real tests strip out. This
+   embeds the exact same testing-mode pages Desmos publishes for each
+   exam, picked by which test is currently active. Confirmed reachable
+   and frameable (no X-Frame-Options / CSP frame-ancestors) as of this
+   build:
+     ACT -> https://www.desmos.com/testing/digital-act/graphing
+     SAT -> https://www.desmos.com/testing/collegeboard/graphing
+            (desmos.com/testing/cb-digital-sat/graphing redirects here)
+   ============================================================ */
+.calcToggle{position:fixed;right:20px;bottom:20px;z-index:1550;width:56px;height:56px;border-radius:50%;border:0;background:var(--blue);color:#fff;box-shadow:0 8px 22px -6px rgba(20,38,58,.5);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.calcToggle svg{width:26px;height:26px}
+.calcToggle:active{transform:translateY(1px)}
+.calcToggle.active{background:#24488a}
+.calcPanel{position:fixed;right:20px;bottom:88px;z-index:1550;width:min(420px, calc(100vw - 40px));height:min(520px, calc(100vh - 140px));background:var(--paper-2);border:1px solid var(--rule);border-radius:var(--r);box-shadow:0 20px 50px -12px rgba(20,38,58,.45);display:none;overflow:hidden;flex-direction:column}
+.calcPanel.show{display:flex}
+.calcHead{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--paper);border-bottom:1px solid var(--rule);flex:none}
+.calcHead b{font-family:var(--f-display);font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+.calcCloseBtn{border:0;background:transparent;color:var(--ink-faint);font-size:19px;line-height:1;cursor:pointer;padding:2px 4px;font-family:inherit}
+.calcCloseBtn:hover{color:var(--ink)}
+.calcPanel iframe{flex:1;width:100%;border:0;background:#fff}
+@media (max-width:520px){
+  .calcPanel{right:10px;bottom:78px;width:calc(100vw - 20px);height:min(66vh, 480px)}
+  .calcToggle{right:14px;bottom:14px;width:50px;height:50px}
+  .card{padding:16px}
+  .stem{font-size:16px}
+  .choice{font-size:15px;padding:12px}
+  .actions .btn{flex:1}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+@media print{ body{background:#fff} .actions,.btn,.calcToggle,.calcPanel{display:none} }
+</style>
+</head>
+<body>
+<script src="../portal-tsi.js?v=20260913e"></script>
+<div class="wrap">
+
+<!-- ==================== EXAM PICKER ==================== -->
+<section id="picker">
+  <div class="topHdr">
+    <div>
+      <p class="eyebrow">College-entrance math practice</p>
+      <h1>ACT &amp; SAT Math Practice</h1>
+      <div class="switchNav">Switch portal: <a href="../index.html">TSI 2.0</a> &middot; <a href="https://eehsmath.github.io/algebra1-portal">Algebra 1</a> &middot; <b>ACT/SAT</b></div>
+    </div>
+    <div class="topHdrRight">
+      <div class="idBox" id="idBox"></div>
+      <button class="btn btn-ghost btn-sm" id="scoresBtn">My scores</button>
+    </div>
+  </div>
+  <p class="muted" style="margin:14px 0 0;max-width:60ch">
+    Two separate practice tests, built the way each real exam actually works,
+    with that exam's own Desmos testing calculator built in. Pick one to start.
+  </p>
+
+  <div class="examPick" style="margin-top:22px">
+    <button type="button" class="examCard" data-exam="ACT" style="--sel:var(--act)">
+      <span class="badge">ACT Math</span>
+      <h3>Fixed, non-adaptive</h3>
+      <p>One set of questions in a fixed order &mdash; the same shape for everyone.
+         A calculator is allowed on every question, just like the real ACT.</p>
+      <ul>
+        <li>30 questions, straight through</li>
+        <li>Scored on the ACT's 1&ndash;36 scale</li>
+        <li>Desmos ACT testing calculator</li>
+      </ul>
+    </button>
+    <button type="button" class="examCard" data-exam="SAT" style="--sel:var(--sat)">
+      <span class="badge">SAT Math</span>
+      <h3>Adaptive, two modules</h3>
+      <p>Module 1 is the same medium mix for everyone. How you do on it decides
+         whether Module 2 leans easier or harder &mdash; you cannot go back to Module 1.</p>
+      <ul>
+        <li>11 + 11 questions across 2 modules</li>
+        <li>Scored on the SAT's 200&ndash;800 scale</li>
+        <li>Desmos (College Board) testing calculator</li>
+      </ul>
+    </button>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <p class="eyebrow" style="margin:0 0 12px">What <span id="examNameA">this test</span> covers</p>
+    <div class="chips" id="blueprintChips"></div>
+    <p class="note" style="margin-top:16px" id="realNote"></p>
+  </div>
+
+  <div class="card">
+    <p class="eyebrow" style="margin:0 0 10px">Feedback</p>
+    <div class="toggle" role="group" aria-label="Feedback timing">
+      <button id="modeTest" aria-pressed="true">Test mode</button>
+      <button id="modePractice" aria-pressed="false">Practice mode</button>
+    </div>
+    <p class="small muted" id="modeDesc" style="margin:10px 0 0">Test mode: no feedback until the end. Closest to the real thing.</p>
+  </div>
+
+  <div class="card hidden" id="resumeCard">
+    <p class="eyebrow" style="margin:0 0 8px;color:var(--amber)">Unfinished test</p>
+    <p style="margin:0 0 4px">You stopped after question <b id="resumeN"></b> of <b id="resumeTotal"></b>.</p>
+    <p class="small muted" id="resumeWhen" style="margin:0"></p>
+    <div class="actions" style="justify-content:flex-start;margin-top:16px">
+      <button class="btn" id="resumeBtn">Pick up where I left off</button>
+      <button class="btn btn-ghost btn-sm" id="discardBtn">Discard and start over</button>
+    </div>
+  </div>
+
+  <div class="actions" style="justify-content:flex-start">
+    <button class="btn" id="startBtn" disabled>Choose a test above to start</button>
+  </div>
+  <p class="small muted hidden" id="guestNote" style="margin:10px 0 0">
+    You're working as a guest. Sign in with your student ID on the hub if you want to be able to stop partway and finish later.
+  </p>
+
+  <details style="margin-top:26px">
+    <summary class="small" style="cursor:pointer;color:var(--blue)">Use a specific test code (teachers)</summary>
+    <div class="card" style="margin-top:10px">
+      <p class="small muted" style="margin:0 0 10px">Paste a code to give a whole class the identical questions for the selected test, or leave blank for a fresh random one.</p>
+      <input id="seedIn" class="seedbox" style="width:100%" placeholder="e.g. ACT-7QK2F9 or SAT-9M3XJ2" autocomplete="off">
+    </div>
+  </details>
+</section>
+
+<!-- ==================== TEST ==================== -->
+<section id="test" class="hidden">
+  <a class="back" href="../index.html" id="testExitLink">&larr; Back</a>
+  <div class="qhead">
+    <p class="eyebrow" style="margin:0"><span class="moduleTag" id="moduleTag"></span> &nbsp;Question <span id="qNum" class="mono">1</span> of <span id="qTotal" class="mono">30</span></p>
+    <p class="eyebrow" id="strandLabel" style="margin:0">&nbsp;</p>
+  </div>
+  <div class="ticks" id="ticks" aria-hidden="true"></div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="figure" id="figure"></div>
+    <p class="stem" id="stem"></p>
+    <div class="choices" id="choices"></div>
+    <div id="feedback"></div>
+    <div class="actions">
+      <button class="btn btn-ghost btn-sm hidden" id="pauseBtn" style="margin-right:auto">Save &amp; finish later</button>
+      <button class="btn" id="nextBtn" disabled>Submit answer</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== MODULE BREAK (SAT only) ==================== -->
+<section id="modBreak" class="hidden">
+  <p class="eyebrow">Module 1 complete</p>
+  <h1 style="margin-top:6px">On to Module 2</h1>
+  <div class="card" style="margin-top:18px">
+    <p style="margin:0 0 10px">Just like the real digital SAT, your Module 1 answers decided which Module 2
+       you're about to get &mdash; and you can't go back and change Module 1 now.</p>
+    <p class="small muted" style="margin:0">Module 2 is 11 more questions. Same rules apply: answer, then move forward.</p>
+    <div class="actions" style="justify-content:flex-start;margin-top:16px">
+      <button class="btn" id="modBreakBtn">Start Module 2</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PAUSED ==================== -->
+<section id="paused" class="hidden">
+  <p class="eyebrow">Saved</p>
+  <h1 style="margin-top:6px">Your test is waiting for you</h1>
+  <div class="card" style="margin-top:18px">
+    <p style="margin:0 0 6px">You've answered <b id="pausedN"></b> of <b id="pausedTotal"></b> questions.</p>
+    <p class="small muted" style="margin:0">Nothing is lost. Open this page again on any computer where you're signed in with your student ID, and it will start at the next question with your answers still counted.</p>
+    <div class="actions" style="justify-content:flex-start;margin-top:18px">
+      <button class="btn" id="pausedResumeBtn">Keep going now</button>
+      <a class="btn btn-ghost btn-sm" href="../index.html" style="text-decoration:none">Back to TSI hub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== RESULTS ==================== -->
+<section id="results" class="hidden">
+  <p class="eyebrow">Your practice result</p>
+  <h1 style="margin-top:6px" id="resultsTitle">Estimated score</h1>
+
+  <div class="card" style="margin-top:18px">
+    <div class="score-big" id="scoreBig">&mdash;</div>
+    <div class="score-of" id="scoreOf"></div>
+    <div class="verdict" id="verdict">&nbsp;</div>
+    <div class="rail-block">
+      <div class="rail"><div class="rail-fill" id="railFill"></div></div>
+      <div class="rail-scale" id="railScale"></div>
+    </div>
+    <p class="note" style="margin-top:18px" id="scoreNote"></p>
+  </div>
+
+  <h2 style="margin:30px 0 4px">Category breakdown</h2>
+  <p class="small muted" style="margin:0 0 14px">Where your time is best spent next.</p>
+  <div class="card" id="strandCards"></div>
+
+  <h2 style="margin:30px 0 14px">Every question, worked out</h2>
+  <div class="card" id="reviewList"></div>
+
+  <div class="card">
+    <p class="eyebrow" style="margin:0 0 10px">Save or share this result</p>
+    <dl class="kv" id="metaList"></dl>
+    <div class="seedbox" id="seedOut" style="margin-top:12px"></div>
+    <div class="actions" style="justify-content:flex-start;margin-top:14px">
+      <button class="btn btn-ghost btn-sm" id="copyBtn">Copy result code</button>
+      <button class="btn btn-ghost btn-sm" id="printBtn">Print / save PDF</button>
+      <button class="btn btn-sm" id="againBtn">Take a new test</button>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<!-- ==================== IDENTITY GATE ==================== -->
+<div class="modal" id="introModal" role="dialog" aria-modal="true" aria-label="Track your progress">
+  <div class="modalCard" style="max-width:420px">
+    <div class="modalHead"><h3>Track your ACT/SAT progress</h3></div>
+    <div class="modalBody">
+      <p class="small muted" style="margin:0 0 14px">Enter your 6-digit student ID to save your scores across visits, or continue as a guest.</p>
+      <div style="display:flex;gap:8px">
+        <input id="idInput" inputmode="numeric" maxlength="6" placeholder="6-digit ID" class="seedbox" style="flex:1;font-size:15px" autocomplete="off" aria-label="Your 6-digit ID">
+        <button class="btn" id="idBtn">Start</button>
+      </div>
+      <p class="tiny" id="idMsg" style="margin:10px 0 0;min-height:16px"></p>
+      <hr class="rule">
+      <button class="btn btn-ghost" id="guestBtn" style="width:100%">Continue as guest</button>
+      <p class="tiny muted" style="margin:8px 0 0">Guest progress isn&rsquo;t saved after this session.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MY SCORES ==================== -->
+<div class="modal" id="scoresModal" role="dialog" aria-modal="true" aria-label="My ACT/SAT scores">
+  <div class="modalCard">
+    <div class="modalHead">
+      <h3>My Scores <span id="scoresName" class="muted" style="font-size:14px"></span></h3>
+      <button class="btn btn-ghost btn-sm" id="closeScores">Close</button>
+    </div>
+    <div class="modalBody">
+      <div class="toggle" role="group" aria-label="Which test" style="margin-bottom:14px">
+        <button id="scoresKindACT" aria-pressed="true">ACT</button>
+        <button id="scoresKindSAT" aria-pressed="false">SAT</button>
+      </div>
+      <div id="scoresBody"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ================================================================
+   §1 CONFIG
+   ================================================================ */
+const CATS = {
+  ALG:  { name:'Algebra',                          cls:'d-alg',  color:'var(--alg)' },
+  FUN:  { name:'Advanced Math &amp; Functions',     cls:'d-fun',  color:'var(--fun)' },
+  GEO:  { name:'Geometry &amp; Trigonometry',       cls:'d-geo',  color:'var(--geo)' },
+  STAT: { name:'Problem Solving &amp; Data Analysis', cls:'d-stat', color:'var(--stat)' }
+};
+
+const EXAMS = {
+  ACT: {
+    key:'ACT', name:'ACT Math', badge:'var(--act)', soft:'var(--act-soft)',
+    fixed: { testLength:30, blueprint:{ ALG:9, FUN:7, GEO:9, STAT:5 } },
+    scoreMin:1, scoreMax:36,
+    calc:'https://www.desmos.com/testing/digital-act/graphing',
+    calcLabel:'Desmos &mdash; ACT testing calculator',
+    realNote:'A calculator is allowed on every ACT math question, so it stays available for the whole test, just like on test day.'
+  },
+  SAT: {
+    key:'SAT', name:'SAT Math', badge:'var(--sat)', soft:'var(--sat-soft)',
+    adaptive: {
+      module1: { len:11, blueprint:{ ALG:3, FUN:3, GEO:2, STAT:3 }, bLo:-0.4, bHi:0.6 },
+      module2: { len:11, blueprint:{ ALG:3, FUN:3, GEO:2, STAT:3 },
+                 harder:{ bLo:0.3, bHi:1.8 }, easier:{ bLo:-1.8, bHi:0.3 } },
+      routeAt: 7   // module-1 raw score at/above this routes to the harder module 2
+    },
+    scoreMin:200, scoreMax:800,
+    calc:'https://www.desmos.com/testing/collegeboard/graphing',
+    calcLabel:'Desmos &mdash; College Board testing calculator',
+    realNote:'The digital SAT allows Desmos on the entire math section, both modules, so it stays available throughout.'
+  }
+};
+
+/* ---------------- §2 SEEDED RNG + HELPERS (same mulberry32 as tsi-crc.html) ---------------- */
+let RNG_STATE = 0;
+function seedRng(seed){ RNG_STATE = seed >>> 0; }
+function rnd(){
+  RNG_STATE = (RNG_STATE + 0x6D2B79F5) | 0;
+  let t = Math.imul(RNG_STATE ^ (RNG_STATE >>> 15), 1 | RNG_STATE);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+function seedToCode(prefix, seed){
+  let n = seed >>> 0, s = '';
+  for(let i=0;i<6;i++){ s = CODE_ALPHABET[n % 32] + s; n = Math.floor(n/32); }
+  return prefix + '-' + s;
+}
+function codeToSeed(prefix, code){
+  const m = String(code||'').trim().toUpperCase().replace(new RegExp('^'+prefix+'-'),'');
+  if(!/^[2-9A-HJ-NP-Z]{6}$/.test(m)) return null;
+  let n = 0;
+  for(const ch of m){ n = n*32 + CODE_ALPHABET.indexOf(ch); }
+  return n >>> 0;
+}
+
+const ri   = (lo,hi) => lo + Math.floor(rnd()*(hi-lo+1));
+const pick = arr => arr[Math.floor(rnd()*arr.length)];
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+const round1 = n => Math.round(n*10)/10;
+const round2 = n => Math.round(n*100)/100;
+const money  = n => '$' + n.toFixed(2);
+function gcd(a,b){ a=Math.abs(a); b=Math.abs(b); while(b){ [a,b]=[b,a%b]; } return a; }
+function frac(n,d){ const g = gcd(n,d)||1; return (n/g)+'/'+(d/g); }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function mc(correct, distractors, pad){
+  const seen = new Set([String(correct)]);
+  const out  = [String(correct)];
+  for(const d of distractors){
+    const s = String(d);
+    if(!seen.has(s) && s !== 'NaN' && s !== 'Infinity'){ seen.add(s); out.push(s); }
+    if(out.length === 4) break;
+  }
+  let guard = 0;
+  while(out.length < 4 && guard++ < 60){
+    let s;
+    if(pad) s = String(pad(guard));
+    else {
+      const n = Number(String(correct).replace(/[^0-9.eE+-]/g,''));
+      if(!Number.isFinite(n)) break;
+      s = String(round2(n + guard*ri(2,9)));
+    }
+    if(s && !seen.has(s) && !/NaN|Infinity/.test(s)){ seen.add(s); out.push(s); }
+  }
+  if(out.length < 4) console.warn('[act-sat] only', out.length, 'distinct options for', correct);
+  const answer = String(correct);
+  return { choices: shuffle(out), answer };
+}
+function near(v, ...deltas){ return deltas.map(d => {
+  const x = v + d;
+  return Number.isInteger(v) && Number.isInteger(d) ? x : round1(x);
+}); }
+
+/* ---------------- §3 FIGURE BUILDERS ---------------- */
+const SW = 'stroke="var(--ink)" fill="none" stroke-width="1.6"';
+const TXT = 'font-family="var(--f-mono)" font-size="13" fill="var(--ink)"';
+const TXTS = 'font-family="var(--f-body)" font-size="11" fill="var(--ink-soft)"';
+
+function svgRightTriangle(aLab,bLab,cLab){
+  return `<svg viewBox="0 0 210 160" width="215" role="img" aria-label="Right triangle">
+    <path d="M55 130 L55 30 L165 130 Z" ${SW}/>
+    <path d="M55 118 L67 118 L67 130" ${SW} stroke-width="1.2"/>
+    <text x="44" y="83"  text-anchor="end"    ${TXT}>${esc(aLab)}</text>
+    <text x="110" y="147" text-anchor="middle" ${TXT}>${esc(bLab)}</text>
+    <text x="118" y="72"  text-anchor="middle" ${TXT} fill="var(--pen)">${esc(cLab)}</text>
+  </svg>`;
+}
+function svgAngleTriangle(a,b,unknownIdx){
+  const labs=[a,b,unknownIdx===2?'x&deg;':(unknownIdx===0?'x&deg;':a+'&deg;')];
+  const A = unknownIdx===0? 'x&deg;' : a+'&deg;', B = unknownIdx===1? 'x&deg;' : b+'&deg;', C = unknownIdx===2? 'x&deg;' : '';
+  return `<svg viewBox="0 0 220 150" width="220" role="img" aria-label="Triangle with two angles labeled">
+    <path d="M30 125 L200 125 L100 20 Z" ${SW}/>
+    <text x="46" y="115" text-anchor="middle" ${TXT} fill="${unknownIdx===0?'var(--pen)':'var(--ink)'}">${A}</text>
+    <text x="182" y="115" text-anchor="middle" ${TXT} fill="${unknownIdx===1?'var(--pen)':'var(--ink)'}">${B}</text>
+    <text x="100" y="40" text-anchor="middle" ${TXT} fill="${unknownIdx===2?'var(--pen)':'var(--ink)'}">${C}</text>
+  </svg>`;
+}
+function svgPrism(l,w,h){
+  return `<svg viewBox="0 0 230 170" width="230" role="img" aria-label="Rectangular prism">
+    <path d="M35 60 L155 60 L155 135 L35 135 Z" ${SW}/>
+    <path d="M35 60 L75 25 L195 25 L155 60" ${SW}/>
+    <path d="M155 60 L195 25 L195 100 L155 135" ${SW}/>
+    <text x="95" y="152"  text-anchor="middle" ${TXT}>${esc(l)}</text>
+    <text x="26" y="101"  text-anchor="end"    ${TXT}>${esc(h)}</text>
+    <text x="182" y="20"  text-anchor="middle" ${TXT}>${esc(w)}</text>
+  </svg>`;
+}
+function svgCylinder(r,h){
+  return `<svg viewBox="0 0 200 190" width="180" role="img" aria-label="Cylinder">
+    <ellipse cx="100" cy="45" rx="58" ry="18" ${SW}/>
+    <path d="M42 45 L42 145" ${SW}/>
+    <path d="M158 45 L158 145" ${SW}/>
+    <path d="M42 145 A58 18 0 0 0 158 145" ${SW}/>
+    <line x1="100" y1="45" x2="158" y2="45" stroke="var(--pen)" stroke-width="1.5"/>
+    <text x="130" y="38" text-anchor="middle" ${TXT} fill="var(--pen)">${esc(r)}</text>
+    <text x="176" y="98" text-anchor="middle" ${TXT}>${esc(h)}</text>
+  </svg>`;
+}
+function svgCircle(rLabel){
+  return `<svg viewBox="0 0 200 170" width="200" role="img" aria-label="Circle with radius ${esc(rLabel)}">
+    <circle cx="100" cy="85" r="62" ${SW}/>
+    <line x1="100" y1="85" x2="162" y2="85" stroke="var(--pen)" stroke-width="1.6"/>
+    <circle cx="100" cy="85" r="3" fill="var(--pen)"/>
+    <text x="131" y="78" text-anchor="middle" ${TXT} fill="var(--pen)">${esc(rLabel)}</text>
+  </svg>`;
+}
+function svgSimilar(a,b,x,d){
+  return `<svg viewBox="0 0 300 150" width="300" role="img" aria-label="Two similar right triangles">
+    <path d="M30 120 L30 35 L115 120 Z" ${SW}/>
+    <text x="22" y="82"  text-anchor="end"    ${TXT}>${esc(a)}</text>
+    <text x="72" y="137" text-anchor="middle" ${TXT}>${esc(b)}</text>
+    <path d="M180 120 L180 55 L265 120 Z" ${SW}/>
+    <text x="172" y="92" text-anchor="end"    ${TXT} fill="var(--pen)">${esc(x)}</text>
+    <text x="222" y="137" text-anchor="middle" ${TXT}>${esc(d)}</text>
+  </svg>`;
+}
+function svgCoordPoints(x1,y1,x2,y2){
+  const S=26, cx0=150, cy0=110;
+  const X=(x)=>cx0+x*S, Y=(y)=>cy0-y*S;
+  let grid='';
+  for(let i=-4;i<=4;i++){
+    grid += `<line x1="${X(i)}" y1="10" x2="${X(i)}" y2="210" stroke="var(--grid)" stroke-width="1"/>`;
+    grid += `<line x1="10" y1="${Y(i)}" x2="290" y2="${Y(i)}" stroke="var(--grid)" stroke-width="1"/>`;
+  }
+  return `<svg viewBox="0 0 300 220" width="260" role="img" aria-label="Coordinate plane with two points">
+    ${grid}
+    <line x1="10" y1="${cy0}" x2="290" y2="${cy0}" stroke="var(--ink-faint)" stroke-width="1.4"/>
+    <line x1="${cx0}" y1="10" x2="${cx0}" y2="210" stroke="var(--ink-faint)" stroke-width="1.4"/>
+    <line x1="${X(x1)}" y1="${Y(y1)}" x2="${X(x2)}" y2="${Y(y2)}" stroke="var(--blue)" stroke-width="1.8"/>
+    <circle cx="${X(x1)}" cy="${Y(y1)}" r="4.5" fill="var(--ink)"/>
+    <circle cx="${X(x2)}" cy="${Y(y2)}" r="4.5" fill="var(--pen)"/>
+    <text x="${X(x1)+8}" y="${Y(y1)-8}" ${TXTS}>(${x1}, ${y1})</text>
+    <text x="${X(x2)+8}" y="${Y(y2)-8}" ${TXTS} fill="var(--pen)">(${x2}, ${y2})</text>
+  </svg>`;
+}
+function svgScatter(points, m, b){
+  const W=300,H=200,pad=28;
+  const xs=points.map(p=>p[0]), ys=points.map(p=>p[1]);
+  const xMax=Math.max(...xs)*1.15, yMax=Math.max(...ys)*1.15;
+  const X=(x)=>pad+(x/xMax)*(W-pad-10), Y=(y)=>H-pad-(y/yMax)*(H-pad-10);
+  const dots = points.map(p=>`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="4" fill="var(--blue)" opacity=".8"/>`).join('');
+  const y0=b, y1=m*xMax+b;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Scatterplot with a line of best fit">
+    <line x1="${pad}" y1="${H-pad}" x2="${W-8}" y2="${H-pad}" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="${pad}" y1="${H-pad}" x2="${pad}" y2="10" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="${X(0).toFixed(1)}" y1="${Y(y0).toFixed(1)}" x2="${X(xMax).toFixed(1)}" y2="${Y(y1).toFixed(1)}" stroke="var(--pen)" stroke-width="1.6"/>
+    ${dots}
+  </svg>`;
+}
+function svgBar(labels, vals, title){
+  const max = Math.max(...vals), W=330, H=180, pad=34, bw=(W-pad-14)/labels.length;
+  let bars='', ticks='';
+  vals.forEach((v,i)=>{
+    const h=(v/max)*(H-58), x=pad+i*bw+bw*0.18, y=H-30-h;
+    bars += `<rect x="${x}" y="${y}" width="${bw*0.64}" height="${h}" fill="var(--blue)" opacity=".82"/>`;
+    bars += `<text x="${x+bw*0.32}" y="${H-15}" text-anchor="middle" ${TXTS}>${esc(labels[i])}</text>`;
+  });
+  for(let t=0;t<=max;t+=Math.max(1,Math.ceil(max/5))){
+    const y=H-30-(t/max)*(H-58);
+    ticks += `<line x1="${pad-4}" y1="${y}" x2="${W-8}" y2="${y}" stroke="var(--grid)" stroke-width="1"/><text x="${pad-8}" y="${y+4}" text-anchor="end" ${TXTS}>${t}</text>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Bar chart: ${esc(title)}">
+    <text x="${W/2}" y="14" text-anchor="middle" ${TXTS} font-weight="600">${esc(title)}</text>
+    ${ticks}${bars}
+    <line x1="${pad-4}" y1="${H-30}" x2="${W-8}" y2="${H-30}" stroke="var(--ink)" stroke-width="1.4"/>
+  </svg>`;
+}
+function tableHTML(head, rows){
+  const th = head.map(h=>`<th>${esc(h)}</th>`).join('');
+  const tr = rows.map(r=>`<tr>${r.map((c,i)=>`<td class="${i?'mono':''}">${esc(c)}</td>`).join('')}</tr>`).join('');
+  return `<table class="dt"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+}
+
+/* ================================================================
+   §4 ITEM BANK
+   Shared between ACT and SAT wherever the topic genuinely overlaps.
+   `exams` marks which test(s) draw on a given item -- a few are
+   ACT-only (radians, matrices-style structure) or SAT-only (data
+   trend reading) to reflect the real differences between the tests.
+   ================================================================ */
+const BANK = [];
+const G = (id,cat,b,skill,exams,gen) => BANK.push({id,cat,b,skill,exams,gen});
+
+/* ---------- ALGEBRA ---------- */
+G('alg_linear_solve','ALG',-1.3,'Solve a linear equation',['ACT','SAT'],()=>{
+  const a=pick([2,3,4,5,6]), c=ri(-20,20), x=ri(-9,9), rhs=a*x+c;
+  const {choices,answer} = mc(x, near(x,1,-1,2,-2));
+  return { stem:`Solve for x: ${a}x ${c>=0?'+':'-'} ${Math.abs(c)} = ${rhs}`,
+    solution:`Isolate x: ${a}x = ${rhs} ${c>=0?'-':'+'} ${Math.abs(c)} = ${rhs-c}. Then x = ${rhs-c} ÷ ${a} = <b>${x}</b>.`, choices, answer };
+});
+G('alg_system2','ALG',0.3,'Solve a linear system',['ACT','SAT'],()=>{
+  const x=ri(-6,6), y=ri(-6,6), a1=pick([1,2,3]), b1=pick([1,2,3]), a2=pick([1,2,-1]), b2=pick([1,-2,3]);
+  const c1=a1*x+b1*y, c2=a2*x+b2*y;
+  const {choices,answer} = mc(`(${x}, ${y})`, [`(${y}, ${x})`, `(${x+1}, ${y})`, `(${x}, ${y-1})`, `(${-x}, ${y})`]);
+  return { stem:`Solve the system: ${a1}x ${b1>=0?'+':'-'} ${Math.abs(b1)}y = ${c1} and ${a2}x ${b2>=0?'+':'-'} ${Math.abs(b2)}y = ${c2}. What is (x, y)?`,
+    solution:`Eliminate one variable by combining the equations, then back-substitute. This system solves to <b>(${x}, ${y})</b> -- check both equations to confirm.`, choices, answer };
+});
+G('alg_inequality','ALG',-0.5,'Solve and graph an inequality',['ACT','SAT'],()=>{
+  const a=pick([2,3,4,-2,-3]), c=ri(-10,10), x0=ri(-8,8), rhs=a*x0+c;
+  const flip = a<0;
+  const {choices,answer} = mc(`x ${flip?'≤':'≥'} ${x0}`, [`x ${flip?'≥':'≤'} ${x0}`, `x ${flip?'≤':'≥'} ${-x0}`, `x = ${x0}`]);
+  return { stem:`Solve: ${a}x ${c>=0?'+':'-'} ${Math.abs(c)} ${flip?'≤':'≥'} ${rhs}`,
+    solution:`Isolate x: ${a}x ${flip?'≤':'≥'} ${rhs-c}, then divide by ${a}.${flip?' Dividing by a negative flips the inequality.':''} Result: <b>x ${flip?'≤':'≥'} ${x0}</b>.`, choices, answer };
+});
+G('alg_abs_value','ALG',0.6,'Solve an absolute value equation',['ACT','SAT'],()=>{
+  const k=ri(2,9), c=ri(-6,6);
+  const lo=c-k, hi=c+k;
+  const {choices,answer} = mc(`x = ${lo} or x = ${hi}`, [`x = ${k}`, `x = ${lo}`, `x = ${hi}`, `x = ${-lo} or x = ${-hi}`]);
+  return { stem:`Solve for all values of x: |x ${c>=0?'-':'+'} ${Math.abs(c)}| = ${k}`,
+    solution:`|x ${c>=0?'-':'+'} ${Math.abs(c)}| = ${k} splits into two cases: x ${c>=0?'-':'+'} ${Math.abs(c)} = ${k} or x ${c>=0?'-':'+'} ${Math.abs(c)} = -${k}. Solving each gives <b>x = ${lo} or x = ${hi}</b>.`, choices, answer };
+});
+G('alg_rate_mix','ALG',0.5,'Rate / mixture word problem',['ACT','SAT'],()=>{
+  const r1=pick([2,3,4,5]), r2=pick([6,7,8,9]), n=ri(5,14), n2=ri(3,10);
+  const total = r1*n + r2*n2;
+  const {choices,answer} = mc(total, near(total,r1,-r1,r2,-r2));
+  return { stem:`A vending machine holds ${n} boxes of granola bars at ${r1} bars each and ${n2} boxes of trail mix at ${r2} bars each. How many bars total?`,
+    solution:`Multiply each box count by its bar count and add: (${n}×${r1}) + (${n2}×${r2}) = ${r1*n} + ${r2*n2} = <b>${total}</b>.`, choices, answer };
+});
+function padRoots(r1,r2){ return (guard) => `x = ${r1+guard} or x = ${r2-guard}`; }
+G('alg_quad_factor','ALG',0.9,'Solve a quadratic by factoring',['ACT','SAT'],()=>{
+  const r1=ri(-7,7), r2=ri(-7,7);
+  const b=-(r1+r2), c=r1*r2;
+  const {choices,answer} = mc(`x = ${r1} or x = ${r2}`, [`x = ${-r1} or x = ${-r2}`, `x = ${r1+1} or x = ${r2}`, `x = ${b} or x = ${c}`], padRoots(r1,r2));
+  return { stem:`Solve for x: x² ${b>=0?'+':'-'} ${Math.abs(b)}x ${c>=0?'+':'-'} ${Math.abs(c)} = 0`,
+    solution:`Factor into (x ${r1<=0?'+':'-'} ${Math.abs(r1)})(x ${r2<=0?'+':'-'} ${Math.abs(r2)}) = 0, since the roots multiply to ${c} and add to ${-b}. So <b>x = ${r1} or x = ${r2}</b>.`, choices, answer };
+});
+G('alg_quad_formula','ALG',1.4,'Use the quadratic formula',['ACT','SAT'],()=>{
+  /* Built from two chosen integer roots (r1, r2) rather than random a/b/c,
+     so the discriminant a²(r1-r2)² is always a perfect square -- no
+     reject-sampling, so this never needs a retry. */
+  const a=pick([1,2]), r1=ri(-6,6), r2=ri(-6,6);
+  const b=-a*(r1+r2), c=a*r1*r2;
+  const disc = b*b-4*a*c, sq=Math.sqrt(disc);
+  const x1 = (-b+sq)/(2*a), x2 = (-b-sq)/(2*a);
+  const {choices,answer} = mc(`x = ${round2(x1)} or x = ${round2(x2)}`, [`x = ${round2(-x1)} or x = ${round2(-x2)}`, `x = ${round2(x1+1)} or x = ${round2(x2)}`, `x = ${b} or x = ${c}`], padRoots(round2(x1),round2(x2)));
+  return { stem:`Use the quadratic formula to solve: ${a}x² ${b>=0?'+':'-'} ${Math.abs(b)}x ${c>=0?'+':'-'} ${Math.abs(c)} = 0`,
+    solution:`x = (-b ± √(b²-4ac)) / 2a = (${-b} ± √${disc}) / ${2*a} = (${-b} ± ${sq}) / ${2*a}, giving <b>x = ${round2(x1)} or x = ${round2(x2)}</b>.`, choices, answer };
+});
+G('alg_exponent_rules','ALG',0.4,'Apply exponent rules',['ACT','SAT'],()=>{
+  const base=pick([2,3,5]), a=ri(2,6), b=ri(1,4);
+  const kind = pick(['mult','div','pow']);
+  let v, stem;
+  if(kind==='mult'){ v=a+b; stem=`Simplify: ${base}<sup>${a}</sup> × ${base}<sup>${b}</sup>`; }
+  else if(kind==='div'){ v=a-b; stem=`Simplify: ${base}<sup>${a}</sup> ÷ ${base}<sup>${b}</sup>`; }
+  else { v=a*b; stem=`Simplify: (${base}<sup>${a}</sup>)<sup>${b}</sup>`; }
+  const ans = `${base}<sup>${v}</sup>`;
+  const {choices,answer} = mc(ans, [`${base}<sup>${a+b}</sup>`, `${base}<sup>${a-b}</sup>`, `${base}<sup>${a*b}</sup>`, `${base*base}<sup>${v}</sup>`].filter(s=>s!==ans));
+  return { stem, solution:`${kind==='mult'?'When multiplying same-base powers, add exponents':kind==='div'?'When dividing same-base powers, subtract exponents':'When raising a power to a power, multiply exponents'}: <b>${ans}</b>.`, choices, answer };
+});
+
+/* ---------- ADVANCED MATH / FUNCTIONS ---------- */
+G('fun_eval','FUN',-1.0,'Evaluate a function',['ACT','SAT'],()=>{
+  const a=pick([2,3,-2]), b=ri(-5,5), x=ri(-4,4);
+  const v = a*x*x+b;
+  const {choices,answer} = mc(v, near(v, a, -a, b, -b));
+  return { stem:`If f(x) = ${a}x² ${b>=0?'+':'-'} ${Math.abs(b)}, what is f(${x})?`,
+    solution:`Substitute x = ${x}: ${a}(${x})² ${b>=0?'+':'-'} ${Math.abs(b)} = ${a}(${x*x}) ${b>=0?'+':'-'} ${Math.abs(b)} = <b>${v}</b>.`, choices, answer };
+});
+G('fun_shift','FUN',0.2,'Identify a graph transformation',['ACT','SAT'],()=>{
+  const h=pick([2,3,4,-2,-3]), k=pick([1,2,-1,-2,3]);
+  const desc = `right ${Math.abs(h)}${k>=0?' and up '+k:' and down '+Math.abs(k)}`;
+  const wrong = `left ${Math.abs(h)}${k>=0?' and up '+k:' and down '+Math.abs(k)}`;
+  const {choices,answer} = mc(desc, [wrong, `right ${Math.abs(h)} and down ${k}`, `up ${Math.abs(h)} and right ${k}`]);
+  return { stem:`The graph of g(x) = f(x ${-h>=0?'+':'-'} ${Math.abs(h)}) ${k>=0?'+':'-'} ${Math.abs(k)} is the graph of f(x) shifted how?`,
+    solution:`Inside the parentheses, x - h shifts right by h (note the sign flips). Adding k outside shifts up by k. Here that's <b>${desc}</b>.`, choices, answer };
+});
+G('fun_exp_growth','FUN',0.7,'Exponential growth model',['ACT','SAT'],()=>{
+  const p0=pick([100,200,500]), r=pick([2,3]), t=ri(2,4);
+  const v = p0*Math.pow(r,t);
+  const {choices,answer} = mc(v, near(v, p0, -p0, v/r, v*r).map(Math.round));
+  return { stem:`A population starts at ${p0} and triples${r===2?' -- actually doubles':''} every year. If it ${r===2?'doubles':'triples'} each year, what is the population after ${t} years?`,
+    solution:`Population = ${p0} × ${r}<sup>${t}</sup> = ${p0} × ${Math.pow(r,t)} = <b>${v}</b>.`, choices, answer };
+});
+G('fun_sequence','FUN',0.1,'Find a term in a sequence',['ACT','SAT'],()=>{
+  const a1=ri(2,9), d=pick([2,3,4,5,-2,-3]), n=ri(6,12);
+  const v = a1+(n-1)*d;
+  const {choices,answer} = mc(v, near(v,d,-d,2*d,-2*d));
+  return { stem:`An arithmetic sequence starts at ${a1} and adds ${d} each term. What is the ${n}th term?`,
+    solution:`nth term = a₁ + (n-1)d = ${a1} + (${n}-1)(${d}) = ${a1} + ${(n-1)*d} = <b>${v}</b>.`, choices, answer };
+});
+G('fun_intercepts','FUN',0.5,'Read intercepts from a graph',['ACT','SAT'],()=>{
+  const m=pick([2,3,-2,-3]), b=ri(-6,6);
+  const xInt = round2(-b/m);
+  const {choices,answer} = mc(`(${xInt}, 0)`, [`(0, ${xInt})`, `(${b}, 0)`, `(0, ${-b})`]);
+  return { figure: svgCoordPoints(0,b, xInt, 0), stem:`A line has equation y = ${m}x ${b>=0?'+':'-'} ${Math.abs(b)}. What is its x-intercept?`,
+    solution:`Set y = 0 and solve: 0 = ${m}x ${b>=0?'+':'-'} ${Math.abs(b)}, so x = ${-b}/${m} = <b>${xInt}</b>. The x-intercept is where the graph crosses the x-axis, i.e. where y = 0.`, choices, answer };
+});
+G('fun_compose','FUN',1.1,'Compose two functions',['ACT','SAT'],()=>{
+  const a=pick([2,3]), b=ri(-4,4), c=pick([1,2,-1]), x=ri(-3,3);
+  const gVal = c*x+1;
+  const v = a*gVal+b;
+  const {choices,answer} = mc(v, near(v,a,-a,b,-b));
+  return { stem:`If f(x) = ${a}x ${b>=0?'+':'-'} ${Math.abs(b)} and g(x) = ${c}x + 1, what is f(g(${x}))?`,
+    solution:`First find g(${x}) = ${c}(${x}) + 1 = ${gVal}. Then f(${gVal}) = ${a}(${gVal}) ${b>=0?'+':'-'} ${Math.abs(b)} = <b>${v}</b>. Work from the inside out.`, choices, answer };
+});
+G('fun_system_graph','SAT',0.8,'Where two functions meet',['SAT'],()=>{
+  /* x excludes 0: at x=0 the plotted "other point" (0, b) collapses onto
+     the intersection point itself (both are (0, b)), which then also
+     collided with a distractor built the same way. */
+  const x=pick([-4,-3,-2,-1,1,2,3,4]), m=pick([2,3]), b=ri(-5,5);
+  const y = m*x+b;
+  const {choices,answer} = mc(`(${x}, ${y})`, [`(${y}, ${x})`, `(${x+1}, ${y})`, `(${x}, ${y+1})`],
+    (guard) => `(${x+guard}, ${y-guard})`);
+  return { figure: svgCoordPoints(0,b,x,y), stem:`Line f has equation y = ${m}x ${b>=0?'+':'-'} ${Math.abs(b)}. If f and a second line g intersect only at the point shown with x-coordinate ${x}, what is that intersection point?`,
+    solution:`At the intersection, both functions share the same (x, y). Plugging x = ${x} into f gives y = ${m}(${x}) ${b>=0?'+':'-'} ${Math.abs(b)} = <b>(${x}, ${y})</b>.`, choices, answer };
+});
+G('fun_radians','ACT',1.0,'Convert degrees and radians',['ACT'],()=>{
+  const deg = pick([30,45,60,90,120,150,180,270]);
+  const g = gcd(deg,180);
+  const num = deg/g, den = 180/g;
+  const ans = num===1 ? `π/${den}` : (den===1? `${num}π` : `${num}π/${den}`);
+  const {choices,answer} = mc(ans, [`${den}π/${num}`, `${deg}π`, `π/${deg}`]);
+  return { stem:`Convert ${deg}° to radians.`,
+    solution:`Multiply by π/180: ${deg} × π/180 = <b>${ans}</b> radians (reduced to lowest terms).`, choices, answer };
+});
+
+/* ---------- GEOMETRY & TRIGONOMETRY ---------- */
+G('geo_angle_sum','GEO',-1.4,'Triangle angle sum',['ACT','SAT'],()=>{
+  const a=ri(30,80), b=ri(30,80-((a>80)?0:0));
+  const c = 180-a-b;
+  if (c<=10 || c>=140) return null;
+  const idx = pick([0,1,2]);
+  const {choices,answer} = mc(idx===2?c:(idx===1?b:a), near(idx===2?c:(idx===1?b:a),5,-5,10,-10));
+  return { figure: svgAngleTriangle(a,b,idx), stem:`In a triangle, two angles measure ${a}° and ${b}°. What is the measure of the third angle, x?`,
+    solution:`A triangle's angles sum to 180°: 180 - ${a} - ${b} = <b>${c}°</b>.`, choices, answer };
+});
+G('geo_pythagorean','GEO',-0.6,'Pythagorean theorem',['ACT','SAT'],()=>{
+  const trip = pick([[3,4,5],[6,8,10],[5,12,13],[9,12,15],[8,15,17]]);
+  const scale = pick([1,1,2]);
+  const [a,b,c] = trip.map(n=>n*scale);
+  const findHyp = rnd()<0.6;
+  const v = findHyp ? c : b;
+  const {choices,answer} = mc(v, near(v,1,-1,2,-2));
+  return { figure: svgRightTriangle(a, findHyp?b:'?', findHyp?'?':c),
+    stem: findHyp ? `A right triangle has legs of length ${a} and ${b}. What is the length of the hypotenuse?`
+                  : `A right triangle has a leg of length ${a} and a hypotenuse of length ${c}. What is the length of the other leg?`,
+    solution: findHyp ? `a² + b² = c²: ${a}² + ${b}² = ${a*a} + ${b*b} = ${a*a+b*b} = c², so c = <b>${c}</b>.`
+                       : `a² + b² = c²: ${a}² + b² = ${c}², so b² = ${c*c} - ${a*a} = ${b*b}, giving b = <b>${b}</b>.`,
+    choices, answer };
+});
+G('geo_trig_ratio','GEO',0.6,'SOH-CAH-TOA',['ACT'],()=>{
+  const trip = pick([[3,4,5],[6,8,10],[5,12,13]]);
+  const scale = pick([1,2]);
+  const [opp,adj,hyp] = trip.map(n=>n*scale);
+  const which = pick(['sin','cos','tan']);
+  const val = which==='sin' ? frac(opp,hyp) : which==='cos' ? frac(adj,hyp) : frac(opp,adj);
+  const {choices,answer} = mc(val, [frac(adj,hyp), frac(opp,hyp), frac(adj,opp), frac(hyp,opp)].filter(s=>s!==val));
+  return { figure: svgRightTriangle(opp,adj,hyp), stem:`In the right triangle shown, the angle at the bottom-left has opposite side ${opp}, adjacent side ${adj}, and hypotenuse ${hyp}. What is ${which} of that angle?`,
+    solution:`SOH-CAH-TOA: sin = opposite/hypotenuse, cos = adjacent/hypotenuse, tan = opposite/adjacent. Here ${which} = <b>${val}</b>.`, choices, answer };
+});
+G('geo_circle_area','GEO',-0.9,'Circle area or circumference',['ACT','SAT'],()=>{
+  const r = pick([2,3,4,5,6,7]);
+  const kind = pick(['area','circ']);
+  const ans = kind==='area' ? `${r*r}π` : `${2*r}π`;
+  const {choices,answer} = mc(ans, [kind==='area'?`${2*r}π`:`${r*r}π`, `${r}π`, `${r*r}`]);
+  return { figure: svgCircle(r), stem:`A circle has radius ${r}. What is its ${kind==='area'?'area':'circumference'}, in terms of π?`,
+    solution: kind==='area' ? `Area = πr² = π(${r})² = <b>${ans}</b>.` : `Circumference = 2πr = 2π(${r}) = <b>${ans}</b>.`, choices, answer };
+});
+G('geo_prism_volume','GEO',0.3,'Volume of a rectangular prism',['ACT','SAT'],()=>{
+  const l=ri(3,10), w=ri(2,8), h=ri(2,9);
+  const v = l*w*h;
+  const {choices,answer} = mc(v, near(v, l*w, w*h, l*h, v/2).map(Math.round));
+  return { figure: svgPrism(l,w,h), stem:`A rectangular prism has length ${l}, width ${w}, and height ${h}. What is its volume?`,
+    solution:`Volume = length × width × height = ${l} × ${w} × ${h} = <b>${v}</b>.`, choices, answer };
+});
+G('geo_cylinder_volume','GEO',1.0,'Volume of a cylinder',['ACT','SAT'],()=>{
+  const r=pick([2,3,4]), h=ri(4,10);
+  const ans = `${r*r*h}π`;
+  const {choices,answer} = mc(ans, [`${2*r*h}π`, `${r*r*h}`, `${r*h}π`]);
+  return { figure: svgCylinder(r,h), stem:`A cylinder has radius ${r} and height ${h}. What is its volume, in terms of π?`,
+    solution:`Volume = πr²h = π(${r})²(${h}) = <b>${ans}</b>.`, choices, answer };
+});
+G('geo_coord_distance','GEO',0.4,'Distance or midpoint between two points',['ACT','SAT'],()=>{
+  const x1=ri(-6,2), y1=ri(-6,2), dx=pick([3,4,6,8]), dy=pick([4,3,8,6]);
+  const x2=x1+dx, y2=y1+dy;
+  const kind = pick(['dist','mid']);
+  let ans;
+  if(kind==='dist'){ const d=Math.sqrt(dx*dx+dy*dy); ans = Number.isInteger(d) ? String(d) : `√${dx*dx+dy*dy}`; }
+  else ans = `(${(x1+x2)/2}, ${(y1+y2)/2})`;
+  const {choices,answer} = mc(ans, kind==='dist' ? [String(dx+dy), `√${dx+dy}`, String(Math.round(Math.sqrt(dx*dx+dy*dy))+1)] : [`(${x1},${y1})`, `(${x2-x1},${y2-y1})`, `(${x1+x2},${y1+y2})`]);
+  return { figure: svgCoordPoints(x1,y1,x2,y2), stem:`What is the ${kind==='dist'?'distance':'midpoint'} between (${x1}, ${y1}) and (${x2}, ${y2})?`,
+    solution: kind==='dist' ? `Distance = √[(x₂-x₁)² + (y₂-y₁)²] = √[${dx}²+${dy}²] = √${dx*dx+dy*dy} = <b>${ans}</b>.`
+                             : `Midpoint = ((x₁+x₂)/2, (y₁+y₂)/2) = ((${x1}+${x2})/2, (${y1}+${y2})/2) = <b>${ans}</b>.`,
+    choices, answer };
+});
+G('geo_similar','GEO',0.8,'Similar triangles',['ACT','SAT'],()=>{
+  const a=pick([3,4,6]), b=ri(4,10), k=pick([2,1.5,3]);
+  const d = round1(b*k);
+  const x = round1(a*k);
+  const {choices,answer} = mc(x, near(x, a, b, k).map(round1));
+  return { figure: svgSimilar(a,b,'x',d), stem:`Two triangles are similar. The smaller has legs ${a} and ${b}. The larger's corresponding side to ${b} measures ${d}. What is the larger triangle's side corresponding to ${a}?`,
+    solution:`Similar triangles keep a constant scale factor: ${d}/${b} = ${k}. Apply it to the other side: ${a} × ${k} = <b>${x}</b>.`, choices, answer };
+});
+
+/* ---------- PROBLEM SOLVING & DATA ANALYSIS ---------- */
+G('stat_mean_median','STAT',-1.1,'Mean, median, or mode',['ACT','SAT'],()=>{
+  const nums = Array.from({length:6}, ()=>ri(2,40));
+  const sorted = nums.slice().sort((a,b)=>a-b);
+  const mean = round1(nums.reduce((a,c)=>a+c,0)/6);
+  const median = round1((sorted[2]+sorted[3])/2);
+  const which = pick(['mean','median']);
+  const v = which==='mean'?mean:median;
+  const {choices,answer} = mc(v, near(v,1,-1,2,-2).map(round1));
+  return { stem:`Data set: ${nums.join(', ')}. What is the ${which} of this data?`,
+    solution: which==='mean' ? `Mean = sum ÷ count = ${nums.reduce((a,c)=>a+c,0)} ÷ 6 = <b>${mean}</b>.`
+                              : `Sorted: ${sorted.join(', ')}. With 6 values, the median is the average of the middle two: (${sorted[2]}+${sorted[3]})/2 = <b>${median}</b>.`,
+    choices, answer };
+});
+G('stat_probability','STAT',-0.7,'Simple probability',['ACT','SAT'],()=>{
+  const red=ri(3,10), blue=ri(3,10), green=ri(2,8);
+  const total = red+blue+green;
+  const {choices,answer} = mc(frac(red,total), [frac(blue,total), frac(green,total), frac(red,blue)].filter(s=>s!==frac(red,total)));
+  return { stem:`A bag has ${red} red, ${blue} blue, and ${green} green marbles. If one is drawn at random, what is the probability it is red?`,
+    solution:`P(red) = red ÷ total = ${red} ÷ ${total} = <b>${frac(red,total)}</b>.`, choices, answer };
+});
+G('stat_twoway','STAT',0.5,'Two-way frequency table',['ACT','SAT'],()=>{
+  const aY=ri(3,10), aN=ri(3,10), bY=ri(3,10), bN=ri(3,10);
+  const totalY = aY+bY, total = aY+aN+bY+bN;
+  const tbl = tableHTML(['','Group A','Group B','Total'], [['Yes',aY,bY,totalY],['No',aN,bN,aN+bN],['Total',aY+aN,bY+bN,total]]);
+  const pct = Math.round(aY/(aY+aN)*100);
+  const {choices,answer} = mc(pct+'%', [Math.round(bY/(bY+bN)*100)+'%', Math.round(aY/total*100)+'%', Math.round((aY+bY)/total*100)+'%']);
+  return { figure: tbl, stem:`According to the table, what percent of Group A answered "Yes"?`,
+    solution:`Limit to Group A's own column: ${aY} ÷ ${aY+aN} = ${round2(aY/(aY+aN))} → <b>${pct}%</b>.`, choices, answer };
+});
+G('stat_scatter_trend','SAT',0.6,'Interpret a line of best fit',['SAT'],()=>{
+  const m = pick([2,3,4]), b = ri(5,20);
+  const pts = Array.from({length:8}, ()=>{ const x=ri(1,10); return [x, Math.max(1, m*x+b+ri(-4,4))]; });
+  const {choices,answer} = mc(`about ${m} units`, [`about ${m*2} units`, `about ${b} units`, `about ${round1(m/2)} units`]);
+  return { figure: svgScatter(pts, m, b), stem:`The scatterplot shows a line of best fit with slope ${m}. Based on the line, about how much does y increase for every 1-unit increase in x?`,
+    solution:`The slope of a line of best fit tells you the average change in y per 1-unit change in x. Here that's <b>about ${m} units</b>.`, choices, answer };
+});
+G('stat_percent_of','STAT',-1.2,'Percent of a number',['ACT','SAT'],()=>{
+  const p = pick([12,15,24,35,42,60,78,85]), n = ri(24,180);
+  const v = round1(p*n/100);
+  const {choices,answer} = mc(v, near(v, -p/10, p/5, 10, -6).map(round1));
+  return { stem:`What is ${p}% of ${n}?`,
+    solution:`${p}% = ${p/100}, so ${p/100} × ${n} = <b>${v}</b>.`, choices, answer };
+});
+G('stat_bar_diff','STAT',-0.8,'Read a bar chart',['ACT','SAT'],()=>{
+  const labels=pick([['Mon','Tue','Wed','Thu','Fri'],['Rm A','Rm B','Rm C','Rm D','Rm E']]);
+  const vals=labels.map(()=>ri(3,20));
+  let v=Math.max(...vals)-Math.min(...vals);
+  if(v<3) vals[0]=Math.max(...vals)+5;
+  const vv=Math.max(...vals)-Math.min(...vals);
+  const {choices,answer} = mc(vv, near(vv,2,-2,4,-3,5));
+  return { figure:svgBar(labels, vals, labels[0]==='Mon'?'Miles Run':'Tickets Sold'),
+    stem:`What is the difference between the highest and lowest values shown in the bar chart?`,
+    solution:`Highest: ${Math.max(...vals)}. Lowest: ${Math.min(...vals)}. Difference: <b>${vv}</b>.`, choices, answer };
+});
+
+/* ================================================================
+   §5 TEST ENGINES
+   ACT is a fixed, non-adaptive form: the whole ordered question list
+   is built once from the seed. SAT is a real two-stage adaptive test:
+   Module 1 is fixed, then Module 1's raw score routes to an easier or
+   harder Module 2 pool -- mirroring how the actual digital SAT works,
+   just scaled down (11+11 instead of 22+22) to keep this buildable.
+   ================================================================ */
+
+function poolFor(exam, cat, bLo, bHi){
+  return BANK.filter(g => g.cat===cat && g.exams.includes(exam) &&
+    (bLo==null || (g.b>=bLo && g.b<=bHi)));
+}
+
+/* Build one fixed-form question list: shuffle each category's items,
+   take the blueprint count from each, interleave. */
+function buildFixedList(exam, blueprint){
+  const list = [];
+  Object.keys(blueprint).forEach(cat=>{
+    let pool = shuffle(BANK.filter(g=>g.cat===cat && g.exams.includes(exam)));
+    let need = blueprint[cat], i=0;
+    while(need>0){
+      list.push(pool[i % pool.length]);
+      i++; need--;
+    }
+  });
+  return shuffle(list);
+}
+
+/* SAT Module 2 pool: same category blueprint, but the difficulty band
+   depends on the routing decision. Falls back to the full category
+   pool if the narrow band is too small (small bank -> keeps items
+   flowing rather than crashing on an empty pool). */
+function buildModule2List(track){
+  const cfg = EXAMS.SAT.adaptive.module2;
+  const band = cfg[track];
+  const list = [];
+  Object.keys(cfg.blueprint).forEach(cat=>{
+    let pool = BANK.filter(g=>g.cat===cat && g.exams.includes('SAT') && g.b>=band.bLo && g.b<=band.bHi);
+    if(!pool.length) pool = BANK.filter(g=>g.cat===cat && g.exams.includes('SAT'));
+    pool = shuffle(pool);
+    let need = cfg.blueprint[cat], i=0;
+    while(need>0){ list.push(pool[i % pool.length]); i++; need--; }
+  });
+  return shuffle(list);
+}
+function buildModule1List(){
+  const cfg = EXAMS.SAT.adaptive.module1;
+  const list = [];
+  Object.keys(cfg.blueprint).forEach(cat=>{
+    let pool = shuffle(BANK.filter(g=>g.cat===cat && g.exams.includes('SAT') && g.b>=cfg.bLo && g.b<=cfg.bHi));
+    if(!pool.length) pool = shuffle(BANK.filter(g=>g.cat===cat && g.exams.includes('SAT')));
+    let need = cfg.blueprint[cat], i=0;
+    while(need>0){ list.push(pool[i % pool.length]); i++; need--; }
+  });
+  return shuffle(list);
+}
+
+/* A generator can return null on an unlucky RNG draw (e.g. no perfect-
+   square discriminant). Regenerate deterministically off the same
+   stream until it succeeds -- still fully replayable since it just
+   consumes a few more rnd() calls, the same every time for a given seed. */
+function safeGen(g){
+  for(let tries=0; tries<8; tries++){
+    const item = g.gen();
+    if(item) return item;
+  }
+  throw new Error('generator kept returning null: '+g.id);
+}
+
+/* ---------------- REPLAY ----------------
+   Whole session is a pure function of (exam, seed, picks). See the
+   identical pattern and rationale in apps/tsi-crc.html §5b -- storing
+   a seed + choice indices instead of rendered questions keeps a
+   50,000-character Sheets cell nowhere near full. */
+const BANK_FP = (function(){
+  const src = BANK.map(g => g.id+':'+g.b+':'+g.cat+':'+g.exams.join('/')).join('|');
+  let h = 2166136261;
+  for(let i=0;i<src.length;i++){ h ^= src.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h>>>0).toString(36);
+})();
+
+function replayACT(seed, picks){
+  seedRng(seed);
+  const list = buildFixedList('ACT', EXAMS.ACT.fixed.blueprint);
+  const history = [];
+  for(let idx=0; idx<picks.length && idx<list.length; idx++){
+    const g = list[idx];
+    let item;
+    try { item = safeGen(g); } catch(e){ return null; }
+    const chosen = item.choices[picks[idx]];
+    if(chosen===undefined) return null;
+    const correct = chosen===item.answer;
+    history.push({ id:g.id, cat:g.cat, skill:g.skill, b:g.b, correct, stem:item.stem, figure:item.figure||'', chosen, answer:item.answer, solution:item.solution });
+  }
+  return { list, history };
+}
+
+function replaySAT(seed, picks){
+  seedRng(seed);
+  const m1 = buildModule1List();
+  const history = [];
+  const m1Len = EXAMS.SAT.adaptive.module1.len;
+  for(let idx=0; idx<Math.min(picks.length, m1Len); idx++){
+    const g = m1[idx];
+    let item;
+    try { item = safeGen(g); } catch(e){ return null; }
+    const chosen = item.choices[picks[idx]];
+    if(chosen===undefined) return null;
+    const correct = chosen===item.answer;
+    history.push({ id:g.id, cat:g.cat, skill:g.skill, b:g.b, correct, stem:item.stem, figure:item.figure||'', chosen, answer:item.answer, module:1 });
+  }
+  if(picks.length <= m1Len) return { m1, m2:null, track:null, history };
+
+  const m1Raw = history.filter(h=>h.correct).length;
+  const track = m1Raw >= EXAMS.SAT.adaptive.routeAt ? 'harder' : 'easier';
+  const m2 = buildModule2List(track);
+  for(let idx=m1Len; idx<picks.length && (idx-m1Len)<m2.length; idx++){
+    const g = m2[idx-m1Len];
+    let item;
+    try { item = safeGen(g); } catch(e){ return null; }
+    const chosen = item.choices[picks[idx]];
+    if(chosen===undefined) return null;
+    const correct = chosen===item.answer;
+    history.push({ id:g.id, cat:g.cat, skill:g.skill, b:g.b, correct, stem:item.stem, figure:item.figure||'', chosen, answer:item.answer, module:2 });
+  }
+  return { m1, m2, track, history };
+}
+
+/* ================================================================
+   §6 SCORING
+   Neither conversion below is the real, form-specific curve the ACT
+   or College Board publish (those vary by test form and are not
+   released as a formula) -- both are documented, monotonic
+   approximations so a practice score lands in a sane, comparable
+   range. Treat the number as "about this level," not an official score.
+   ================================================================ */
+function scoreACT(history){
+  const total = history.length, right = history.filter(h=>h.correct).length;
+  const pct = total ? right/total : 0;
+  const scaled = 1 + Math.round(35 * Math.pow(pct, 0.85));
+  return Math.max(1, Math.min(36, scaled));
+}
+function scoreSAT(history, track){
+  const m1 = history.filter(h=>h.module===1), m2 = history.filter(h=>h.module===2);
+  const m1Raw = m1.filter(h=>h.correct).length, m1N = m1.length || 1;
+  const m2Raw = m2.filter(h=>h.correct).length, m2N = m2.length || 1;
+  const m1Contrib = (m1Raw/m1N - 0.5);
+  const m2Weight = track==='harder' ? 0.7 : 0.5;
+  const m2Base = track==='harder' ? 0.35 : -0.25;
+  const m2Contrib = m2Base + (m2Raw/m2N - 0.5)*m2Weight*2;
+  const theta = Math.max(-1, Math.min(1, m1Contrib*0.6 + m2Contrib*0.6));
+  const scaled = Math.round((200 + (theta+1)/2*600)/10)*10;
+  return Math.max(200, Math.min(800, scaled));
+}
+
+function catSummary(history, cats){
+  const out = {};
+  Object.keys(cats).forEach(key=>{
+    const its = history.filter(h=>h.cat===key);
+    const n = its.length, right = its.filter(h=>h.correct).length;
+    const idx = n ? its.reduce((a,h)=>a + h.b + (h.correct?0.5:-0.5), 0)/n : 0;
+    const acc = n ? right/n : 0;
+    let band = idx >= 0.6 ? 'Advanced' : idx >= -0.4 ? 'Proficient' : 'Basic';
+    if (band === 'Advanced'   && acc < 0.60) band = 'Proficient';
+    if (band === 'Proficient' && acc < 0.40) band = 'Basic';
+    const skills = {};
+    its.forEach(h=>{ (skills[h.skill] = skills[h.skill] || {n:0,ok:0}); skills[h.skill].n++; if(h.correct) skills[h.skill].ok++; });
+    out[key] = { n, right, band, pct: n?Math.round(right/n*100):0,
+      fill: Math.max(4, Math.min(100, Math.round((idx+2)/4*100))),
+      weak: Object.keys(skills).filter(s=>skills[s].ok<skills[s].n) };
+  });
+  return out;
+}
+
+/* ================================================================
+   §7 PORTAL INTEGRATION
+   Same reasoning as apps/tsi-crc.html §8: results live under their
+   own ACT.x / SAT.x skill ids, outside REGISTRY, so a test tuned to
+   ~50% difficulty per item can never move a standard's mastery
+   numbers. logTest()/testLog()/testSummary() take a `kind` so CRC,
+   ACT, and SAT histories never mix (see portal-tsi.js). Resume slots
+   are likewise namespaced by kind, so starting an ACT test does not
+   clobber an unfinished SAT one, or vice versa.
+   ================================================================ */
+function makePortalLink(examKey){
+  const ids = {}; Object.keys(CATS).forEach(c=>ids[c] = examKey+'.'+c);
+  return {
+    ids, whole: examKey+'.TEST', kind: examKey,
+    get on(){ return !!(window.TSIPortal && typeof window.TSIPortal.record === 'function'); },
+    commitItems(history){
+      if(!this.on) return;
+      try { history.forEach(h => window.TSIPortal.record(this.ids[h.cat], !!h.correct, { level:1 })); }
+      catch(e){ console.warn('[act-sat] record failed', e); }
+    },
+    flush(){ if(!this.on) return; try{ if(typeof window.TSIPortal.flushSync==='function') window.TSIPortal.flushSync(); }catch(e){} },
+    finish(result){
+      if(!this.on) return;
+      try {
+        const band = Math.max(1, Math.min(5, Math.round((result.pct)*5)) || 1);
+        window.TSIPortal.record(this.whole, !!result.ready, { level: band });
+      } catch(e){ console.warn('[act-sat] record failed', e); }
+      try {
+        if(typeof window.TSIPortal.logTest === 'function'){
+          window.TSIPortal.logTest({ t:Date.now(), kind:this.kind, code:result.code, score:result.score,
+            ready:result.ready, right:result.right, n:result.total, mode:result.mode, s:result.catPairs,
+            track: result.track||null });
+        }
+      } catch(e){ console.warn('[act-sat] logTest failed', e); }
+    },
+    get canResume(){ try{ return this.on && window.TSIPortal.mode()==='student' && typeof window.TSIPortal.saveResume==='function'; }catch(e){ return false; } },
+    saveResume(snap, flush){ if(!this.canResume) return false; try{ return window.TSIPortal.saveResume(snap, !!flush, this.kind); }catch(e){ return false; } },
+    getResume(){ if(!this.canResume) return null; try{ return window.TSIPortal.getResume(this.kind); }catch(e){ return null; } },
+    clearResume(flush){ if(!this.canResume) return false; try{ return window.TSIPortal.clearResume(!!flush, this.kind); }catch(e){ return false; } },
+    who(){ if(!this.on) return null; try{ const id=window.TSIPortal.studentId(), name=window.TSIPortal.studentName(); return id?{id,name}:null; }catch(e){ return null; } }
+  };
+}
+
+/* ================================================================
+   §8 UI
+   ================================================================ */
+const $ = s => document.querySelector(s);
+let EXAM = null;           // 'ACT' | 'SAT'
+let PortalLink = null;
+let MODE = 'test';         // 'test' | 'practice'
+let SEED = 0, PICKS = [], SESSION = null, CUR_LIST = null, CUR_ITEM = null, SEL_IDX = null;
+let PAUSED_AT = null;
+
+function totalFor(exam){ return exam==='ACT' ? EXAMS.ACT.fixed.testLength
+  : EXAMS.SAT.adaptive.module1.len + EXAMS.SAT.adaptive.module2.len; }
+
+/* ---------- exam picker ---------- */
+function renderBlueprint(exam){
+  const chips = $('#blueprintChips');
+  const bp = exam==='ACT' ? EXAMS.ACT.fixed.blueprint
+    : Object.keys(EXAMS.SAT.adaptive.module1.blueprint).reduce((o,k)=>{
+        o[k] = EXAMS.SAT.adaptive.module1.blueprint[k] + EXAMS.SAT.adaptive.module2.blueprint[k]; return o; }, {});
+  chips.innerHTML = Object.keys(bp).map(k =>
+    '<span class="chip"><span class="dot '+CATS[k].cls+'"></span>'+CATS[k].name+' &middot; '+bp[k]+' questions</span>'
+  ).join('');
+  $('#realNote').innerHTML = EXAMS[exam].realNote;
+  $('#examNameA').textContent = EXAMS[exam].name;
+}
+
+function selectExam(exam){
+  EXAM = exam;
+  PortalLink = makePortalLink(exam);
+  document.querySelectorAll('.examCard').forEach(c => c.classList.toggle('sel', c.getAttribute('data-exam')===exam));
+  renderBlueprint(exam);
+  $('#startBtn').disabled = false;
+  $('#startBtn').textContent = 'Start the '+EXAMS[exam].name+' practice test';
+  checkResume();
+  pointCalcAt(exam);
+}
+document.querySelectorAll('.examCard').forEach(c => c.addEventListener('click', () => selectExam(c.getAttribute('data-exam'))));
+
+
+$('#modeTest').addEventListener('click', () => setMode('test'));
+$('#modePractice').addEventListener('click', () => setMode('practice'));
+function setMode(m){
+  MODE = m;
+  $('#modeTest').setAttribute('aria-pressed', String(m==='test'));
+  $('#modePractice').setAttribute('aria-pressed', String(m==='practice'));
+  $('#modeDesc').textContent = m==='test'
+    ? 'Test mode: no feedback until the end. Closest to the real thing.'
+    : 'Practice mode: see right/wrong and a worked solution after every question.';
+}
+
+function checkResume(){
+  if(!PortalLink || !PortalLink.canResume){
+    $('#resumeCard').classList.add('hidden');
+    $('#guestNote').classList.toggle('hidden', !!(PortalLink && PortalLink.who()));
+    return;
+  }
+  const r = PortalLink.getResume();
+  if(!r){ $('#resumeCard').classList.add('hidden'); $('#guestNote').classList.add('hidden'); return; }
+  $('#resumeCard').classList.remove('hidden');
+  $('#guestNote').classList.add('hidden');
+  $('#resumeN').textContent = r.picks.length;
+  $('#resumeTotal').textContent = totalFor(EXAM);
+  $('#resumeWhen').textContent = r.at ? ('Last worked on '+new Date(r.at).toLocaleString()) : '';
+}
+
+$('#resumeBtn').addEventListener('click', () => {
+  const r = PortalLink.getResume();
+  if(!r){ checkResume(); return; }
+  startFromSeed(r.seed, r.picks.slice());
+});
+$('#discardBtn').addEventListener('click', () => {
+  PortalLink.clearResume(true);
+  checkResume();
+});
+
+$('#startBtn').addEventListener('click', () => {
+  if(!EXAM) return;
+  const code = $('#seedIn').value.trim();
+  let seed;
+  if(code){
+    seed = codeToSeed(EXAM, code);
+    if(seed==null){ alert('That code does not look like a valid '+EXAM+' test code.'); return; }
+  } else {
+    seed = (Date.now() ^ Math.floor(Math.random()*0xffffffff)) >>> 0;
+  }
+  startFromSeed(seed, []);
+});
+
+function startFromSeed(seed, picks){
+  SEED = seed; PICKS = picks;
+  runReplay();
+  $('#picker').classList.add('hidden');
+  $('#modBreak').classList.add('hidden');
+  $('#paused').classList.add('hidden');
+  $('#results').classList.add('hidden');
+  if(SESSION && EXAM==='SAT' && PICKS.length===EXAMS.SAT.adaptive.module1.len && !SESSION.m2){
+    showModuleBreak();
+  } else {
+    showQuestion();
+  }
+}
+
+function runReplay(){
+  SESSION = EXAM==='ACT' ? replayACT(SEED, PICKS) : replaySAT(SEED, PICKS);
+  if(!SESSION){ alert('Could not resume this test (the question bank may have changed). Starting fresh.'); SEED = (Date.now()>>>0); PICKS=[]; SESSION = EXAM==='ACT' ? replayACT(SEED,PICKS) : replaySAT(SEED,PICKS); }
+}
+
+/* ---------- module break (SAT) ---------- */
+function showModuleBreak(){
+  $('#test').classList.add('hidden');
+  $('#modBreak').classList.remove('hidden');
+}
+$('#modBreakBtn').addEventListener('click', () => { $('#modBreak').classList.add('hidden'); showQuestion(); });
+
+/* ---------- question rendering ---------- */
+function currentList(){
+  if(EXAM==='ACT') return SESSION.list;
+  return PICKS.length < EXAMS.SAT.adaptive.module1.len || !SESSION.m2
+    ? SESSION.m1 : SESSION.m2;
+}
+function indexWithinList(){
+  if(EXAM==='ACT') return PICKS.length;
+  const m1Len = EXAMS.SAT.adaptive.module1.len;
+  return PICKS.length < m1Len ? PICKS.length : PICKS.length - m1Len;
+}
+
+function showQuestion(){
+  $('#test').classList.remove('hidden');
+  const list = currentList();
+  const idx = indexWithinList();
+  if(idx >= list.length){ finishTest(); return; }
+  const g = list[idx];
+  CUR_ITEM = safeGen(g);
+  CUR_LIST = list;
+  SEL_IDX = null;
+
+  const total = totalFor(EXAM);
+  $('#qNum').textContent = PICKS.length+1;
+  $('#qTotal').textContent = total;
+  $('#strandLabel').innerHTML = CATS[g.cat].name;
+  const tag = $('#moduleTag');
+  if(EXAM==='SAT'){
+    const mod = PICKS.length < EXAMS.SAT.adaptive.module1.len ? 1 : 2;
+    tag.textContent = 'Module '+mod+' of 2';
+    tag.style.background = 'var(--sat)';
+    tag.style.display='inline-flex';
+  } else {
+    tag.style.display='none';
+  }
+
+  const ticks = $('#ticks');
+  ticks.innerHTML = Array.from({length: EXAM==='SAT' ? (PICKS.length<11?11:11) : total}, (_,i)=>{
+    const cls = i < idx ? 'done' : (i===idx ? 'now' : '');
+    return '<div class="tick '+cls+'"></div>';
+  }).join('');
+
+  $('#figure').innerHTML = CUR_ITEM.figure || '';
+  $('#stem').innerHTML = CUR_ITEM.stem;
+  $('#choices').innerHTML = CUR_ITEM.choices.map((c,i) =>
+    '<button type="button" class="choice" data-i="'+i+'"><span class="lab">'+String.fromCharCode(65+i)+'</span><span>'+c+'</span></button>'
+  ).join('');
+  $('#feedback').innerHTML = '';
+  $('#nextBtn').disabled = true;
+  $('#nextBtn').textContent = 'Submit answer';
+
+  $('#pauseBtn').classList.toggle('hidden', !PortalLink.canResume);
+
+  document.querySelectorAll('.choice').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if(btn.disabled) return;
+      document.querySelectorAll('.choice').forEach(b=>b.classList.remove('sel'));
+      btn.classList.add('sel');
+      SEL_IDX = Number(btn.getAttribute('data-i'));
+      $('#nextBtn').disabled = false;
+    });
+  });
+}
+
+$('#nextBtn').addEventListener('click', () => {
+  if($('#nextBtn').textContent === 'Submit answer'){
+    if(SEL_IDX==null) return;
+    const chosen = CUR_ITEM.choices[SEL_IDX];
+    const correct = chosen === CUR_ITEM.answer;
+    document.querySelectorAll('.choice').forEach((b,i) => {
+      b.disabled = true;
+      if(MODE==='practice'){
+        if(CUR_ITEM.choices[i]===CUR_ITEM.answer) b.classList.add('correct');
+        else if(i===SEL_IDX) b.classList.add('wrong');
+      }
+    });
+    if(MODE==='practice'){
+      $('#feedback').innerHTML = '<div class="feedback '+(correct?'fb-ok':'fb-no')+'"><b>'+(correct?'Correct.':'Not quite.')+'</b> '+CUR_ITEM.solution+'</div>';
+    }
+    PICKS.push(SEL_IDX);
+    PortalLink.saveResume({ v:1, seed:SEED, picks:PICKS.slice(), fp:BANK_FP, at:Date.now(), examVersion:'act-sat-v1' }, false);
+    $('#nextBtn').textContent = 'Next question';
+    $('#nextBtn').disabled = false;
+  } else {
+    runReplay();
+    const m1Len = EXAM==='SAT' ? EXAMS.SAT.adaptive.module1.len : Infinity;
+    if(EXAM==='SAT' && PICKS.length===m1Len && !SESSION.m2){
+      showModuleBreak();
+    } else {
+      showQuestion();
+    }
+  }
+});
+
+$('#pauseBtn').addEventListener('click', () => {
+  PortalLink.saveResume({ v:1, seed:SEED, picks:PICKS.slice(), fp:BANK_FP, at:Date.now(), examVersion:'act-sat-v1' }, true);
+  $('#test').classList.add('hidden');
+  $('#modBreak').classList.add('hidden');
+  $('#paused').classList.remove('hidden');
+  $('#pausedN').textContent = PICKS.length;
+  $('#pausedTotal').textContent = totalFor(EXAM);
+});
+$('#pausedResumeBtn').addEventListener('click', () => {
+  $('#paused').classList.add('hidden');
+  runReplay();
+  if(EXAM==='SAT' && PICKS.length===EXAMS.SAT.adaptive.module1.len && !SESSION.m2) showModuleBreak();
+  else showQuestion();
+});
+
+/* ---------- results ---------- */
+function finishTest(){
+  $('#test').classList.add('hidden');
+  const history = SESSION.history;
+  const total = history.length, right = history.filter(h=>h.correct).length;
+
+  let score, cats;
+  if(EXAM==='ACT'){
+    score = scoreACT(history);
+    cats = catSummary(history, CATS);
+  } else {
+    score = scoreSAT(history, SESSION.track);
+    cats = catSummary(history, CATS);
+  }
+  const pct = total ? right/total : 0;
+  const ready = EXAM==='ACT' ? score>=22 : score>=530;   // rough "on-track" reference lines, not an official cut
+
+  const catPairs = {};
+  Object.keys(cats).forEach(k => { catPairs[k] = [cats[k].right, cats[k].n]; });
+
+  const result = {
+    score, total, right, pct, ready, mode: MODE, track: SESSION.track,
+    catPairs, code: seedToCode(EXAM, SEED)
+  };
+  PortalLink.finish(result);
+  PortalLink.clearResume(false);
+  PortalLink.commitItems(history);
+  PortalLink.flush();
+
+  renderResults(result, cats, history);
+  $('#results').classList.remove('hidden');
+}
+
+function renderResults(result, cats, history){
+  const exam = EXAMS[EXAM];
+  $('#resultsTitle').textContent = 'Estimated '+exam.name+' score';
+  $('#scoreBig').textContent = result.score;
+  $('#scoreOf').textContent = 'out of '+exam.scoreMax+(EXAM==='ACT' ? ' (scale starts at '+exam.scoreMin+')' : '');
+  $('#verdict').textContent = EXAM==='ACT'
+    ? (result.ready ? 'At or above a common college-readiness benchmark (22+)' : 'Below the common 22+ benchmark for this practice set')
+    : (SESSION.track==='harder'
+        ? 'Routed to the harder Module 2 after Module 1'
+        : 'Routed to the easier Module 2 after Module 1');
+
+  const fillPct = Math.round((result.score - exam.scoreMin) / (exam.scoreMax - exam.scoreMin) * 100);
+  $('#railFill').style.width = fillPct+'%';
+  $('#railScale').innerHTML = EXAM==='ACT'
+    ? '<span>1</span><span>9</span><span>18</span><span>27</span><span>36</span>'
+    : '<span>200</span><span>350</span><span>500</span><span>650</span><span>800</span>';
+
+  $('#scoreNote').innerHTML = EXAM==='ACT'
+    ? 'This is a rough estimate from a fixed, non-adaptive practice set, the same shape as the real ACT math test -- it is not an official ACT scaled score.'
+    : 'This reflects the digital SAT\'s real multistage design (Module 2 depends on Module 1), scaled down to 11+11 questions -- it is not an official College Board score.';
+
+  const cards = Object.keys(cats).map(key => {
+    const c = cats[key], meta = CATS[key];
+    const bandCls = c.band==='Advanced'?'b-adv':c.band==='Proficient'?'b-pro':'b-bas';
+    return '<div class="strand"><div class="strand-top">'+
+      '<span class="strand-name"><span class="dot '+meta.cls+'"></span>'+meta.name+'</span>'+
+      '<span class="band '+bandCls+'">'+c.band+'</span></div>'+
+      '<div class="sbar"><i style="width:'+c.fill+'%;background:'+meta.color+'"></i></div>'+
+      '<div class="strand-meta"><span>'+c.right+'/'+c.n+' correct ('+c.pct+'%)</span>'+
+      (c.weak.length ? '<span>Focus next: '+c.weak.join(', ')+'</span>' : '<span>No weak spots flagged</span>')+
+      '</div></div>';
+  }).join('');
+  $('#strandCards').innerHTML = cards;
+
+  $('#reviewList').innerHTML = history.map((h,i) => {
+    const meta = CATS[h.cat];
+    return '<div class="rev"><div class="rev-top">'+
+      '<span class="mark '+(h.correct?'m-ok':'m-no')+'">'+(h.correct?'CORRECT':'MISSED')+'</span>'+
+      '<span class="small muted">Q'+(i+1)+(h.module?' &middot; Module '+h.module:'')+' &middot; <span class="dot '+meta.cls+'" style="display:inline-block;vertical-align:middle"></span> '+meta.name+'</span></div>'+
+      (h.figure ? '<div class="figure">'+h.figure+'</div>' : '')+
+      '<p style="margin:8px 0">'+h.stem+'</p>'+
+      '<p class="small">Your answer: <b>'+h.chosen+'</b>'+(h.correct?'':' &middot; Correct answer: <b>'+h.answer+'</b>')+'</p>'+
+      (h.solution ? '<details><summary>Show worked solution</summary><div class="sol">'+h.solution+'</div></details>' : '')+
+      '</div>';
+  }).join('');
+
+  const who = PortalLink.who();
+  $('#metaList').innerHTML =
+    '<dt>Student</dt><dd>'+(who ? esc(who.name||who.id) : 'Guest')+'</dd>'+
+    '<dt>Mode</dt><dd>'+(result.mode==='practice'?'Practice mode':'Test mode')+'</dd>'+
+    '<dt>Raw score</dt><dd>'+result.right+' / '+result.total+'</dd>'+
+    (SESSION.track ? '<dt>Module 2 track</dt><dd>'+SESSION.track+'</dd>' : '');
+  $('#seedOut').textContent = 'Test code: '+result.code;
+}
+
+$('#copyBtn').addEventListener('click', () => {
+  const text = $('#seedOut').textContent;
+  navigator.clipboard && navigator.clipboard.writeText(text).catch(()=>{});
+});
+$('#printBtn').addEventListener('click', () => window.print());
+$('#againBtn').addEventListener('click', () => {
+  $('#results').classList.add('hidden');
+  $('#picker').classList.remove('hidden');
+  $('#seedIn').value = '';
+  checkResume();
+});
+
+/* ---------- Desmos testing calculator ----------
+   Each exam has its own real Desmos testing-mode page (see the CSS
+   comment above the .calcToggle rules for the confirmed URLs), so the
+   iframe is re-pointed whenever the exam selection changes -- lazily,
+   only once the panel is actually opened, so picking an exam doesn't
+   fire an unnecessary network request. */
+const calcToggle = document.createElement('button');
+calcToggle.className = 'calcToggle';
+calcToggle.setAttribute('aria-label','Open calculator');
+calcToggle.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm1 2v5h10V4H7zm0 7v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zm-8 4v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zm-8 4v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2z"/></svg>';
+const calcPanel = document.createElement('div');
+calcPanel.className = 'calcPanel';
+calcPanel.innerHTML = '<div class="calcHead"><b id="calcLabel">Calculator</b><button type="button" class="calcCloseBtn" aria-label="Close calculator">&times;</button></div>';
+const calcIframe = document.createElement('iframe');
+calcIframe.setAttribute('title','Desmos testing calculator');
+calcIframe.setAttribute('loading','lazy');
+calcPanel.appendChild(calcIframe);
+document.body.appendChild(calcToggle);
+document.body.appendChild(calcPanel);
+let calcLoaded = false;
+
+function pointCalcAt(exam){
+  calcLoaded = false;
+  if(calcPanel.classList.contains('show')) loadCalc(exam);
+}
+function loadCalc(exam){
+  calcIframe.src = EXAMS[exam].calc;
+  calcPanel.querySelector('#calcLabel').innerHTML = EXAMS[exam].calcLabel;
+  calcLoaded = true;
+}
+calcToggle.addEventListener('click', () => {
+  if(calcPanel.classList.contains('show')){
+    calcPanel.classList.remove('show'); calcToggle.classList.remove('active');
+  } else {
+    calcPanel.classList.add('show'); calcToggle.classList.add('active');
+    if(!calcLoaded && EXAM) loadCalc(EXAM);
+  }
+});
+calcPanel.querySelector('.calcCloseBtn').addEventListener('click', () => {
+  calcPanel.classList.remove('show'); calcToggle.classList.remove('active');
+});
+
+/* ================================================================
+   §9 IDENTITY GATE + MY SCORES
+   This page is a top-level portal (peer of the TSI and Algebra 1
+   hubs, not a page nested under either), so unlike apps/tsi-crc.html
+   it can't assume a visitor already chose an ID on some hub page --
+   someone can land here first via the switchNav link. Same ID/guest
+   mechanism as index.html, ported in full rather than assumed.
+   ================================================================ */
+function updateIdentity(){
+  const box = $('#idBox');
+  const mode = TSIPortal.mode();
+  if (mode === 'student'){
+    const name = TSIPortal.studentName();
+    const greet = name ? ('Welcome back, '+esc(name)+'!') : ('Tracking ID '+esc(TSIPortal.studentId()));
+    box.innerHTML = '<span class="idPill">'+greet+'</span><button class="switchLink" id="switchIdBtn">Switch ID</button>';
+    $('#switchIdBtn').addEventListener('click', doSwitchId);
+  } else if (mode === 'guest'){
+    box.innerHTML = '<span class="idPill guest">Guest mode &middot; not saved</span><button class="switchLink" id="saveProgBtn">Save progress</button>';
+    $('#saveProgBtn').addEventListener('click', openIntro);
+  } else {
+    box.innerHTML = '';
+  }
+}
+function openIntro(){
+  $('#idMsg').textContent = '';
+  $('#idInput').value = '';
+  $('#idBtn').disabled = false;
+  $('#introModal').classList.add('show');
+  setTimeout(() => $('#idInput').focus(), 30);
+}
+function hideIntro(){ $('#introModal').classList.remove('show'); }
+$('#idInput').addEventListener('input', function(){ this.value = this.value.replace(/\D/g,'').slice(0,6); });
+function submitId(){
+  const v = ($('#idInput').value||'').trim();
+  const msg = $('#idMsg');
+  if (!TSIPortal.validId(v)){ msg.textContent = 'Please enter your 6-digit ID (numbers only).'; msg.style.color='var(--pen)'; return; }
+  $('#idBtn').disabled = true;
+  msg.textContent = 'Checking…'; msg.style.color='var(--ink-soft)';
+  TSIPortal.identify(v, (ok, err) => {
+    if (ok){ hideIntro(); updateIdentity(); checkResume(); }
+    else { msg.textContent = err || 'Something went wrong. Please try again.'; msg.style.color='var(--pen)'; $('#idBtn').disabled = false; }
+  });
+}
+$('#idBtn').addEventListener('click', submitId);
+$('#idInput').addEventListener('keydown', e => { if (e.key==='Enter') submitId(); });
+$('#guestBtn').addEventListener('click', () => { TSIPortal.startGuest(); hideIntro(); updateIdentity(); checkResume(); });
+function doSwitchId(){
+  if (!confirm('Switch ID? This clears the progress saved on THIS device so you can enter a different ID. Your saved work for your own ID is safe and comes back when you re-enter it.')) return;
+  TSIPortal.switchId();
+  updateIdentity();
+  checkResume();
+  openIntro();
+}
+
+/* ---------- My Scores: ACT/SAT test history, its own tab (not part of
+   the TSI hub's report -- CRC results live there, ACT/SAT results live
+   here, kept apart by the `kind` tag on testLog/testSummary). ---------- */
+let scoresKind = 'ACT';
+function scoreChip(ready, kind){
+  const okText = kind==='ACT' ? 'On track (22+)' : 'On track (530+)';
+  const noText = kind==='ACT' ? 'Below 22' : 'Below 530';
+  return ready ? '<span style="color:var(--check);font-weight:700">'+okText+'</span>'
+               : '<span style="color:var(--ink-soft);font-weight:700">'+noText+'</span>';
+}
+function catCell(pair){
+  if (!pair || !pair[1]) return '<td class="num muted">&mdash;</td>';
+  const acc = pair[0]/pair[1];
+  const tone = acc>=0.8 ? 'var(--check)' : acc>=0.5 ? 'var(--ink)' : 'var(--pen)';
+  return '<td class="num" style="color:'+tone+'">'+pair[0]+'/'+pair[1]+'</td>';
+}
+function renderScores(){
+  const kind = scoresKind;
+  const meta = EXAMS[kind];
+  const log = (TSIPortal.testLog(kind)||[]).slice().reverse();
+  $('#scoresName').textContent = TSIPortal.studentName() ? '· '+TSIPortal.studentName() : '';
+  if (!log.length){
+    $('#scoresBody').innerHTML = '<p class="muted small">No '+meta.name+' practice tests taken yet.</p>';
+    return;
+  }
+  const sum = TSIPortal.testSummary(kind);
+  const catKeys = Object.keys(CATS);
+  let html = '<p class="small muted" style="margin:0 0 12px"><b>'+sum.count+'</b> test'+(sum.count===1?'':'s')+' taken &middot; best <b>'+sum.best+'</b> &middot; latest <b>'+sum.latest+'</b> (scale '+meta.scoreMin+'&ndash;'+meta.scoreMax+') &middot; <b>'+sum.passed+'</b> on track</p>';
+  html += '<div style="overflow-x:auto"><table class="dt" style="width:100%"><thead><tr><th>Date</th><th>Score</th><th>Result</th><th>Raw</th>'+
+    catKeys.map(k=>'<th>'+k+'</th>').join('')+'<th>Code</th></tr></thead><tbody>';
+  html += log.map(e => {
+    const s = e.s || {};
+    return '<tr><td class="muted">'+new Date(e.t).toLocaleDateString()+'</td>'+
+      '<td class="num"><b>'+e.score+'</b></td>'+
+      '<td>'+scoreChip(e.ready, kind)+'</td>'+
+      '<td class="num">'+e.right+'/'+e.n+'</td>'+
+      catKeys.map(k => catCell(s[k])).join('')+
+      '<td class="muted" style="font-size:12px">'+esc(e.code||'—')+(e.track?' ('+esc(e.track)+')':'')+'</td></tr>';
+  }).join('');
+  html += '</tbody></table></div>';
+  $('#scoresBody').innerHTML = html;
+}
+function openScores(){
+  renderScores();
+  $('#scoresModal').classList.add('show');
+}
+$('#scoresBtn').addEventListener('click', openScores);
+$('#closeScores').addEventListener('click', () => $('#scoresModal').classList.remove('show'));
+$('#scoresModal').addEventListener('click', e => { if(e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
+$('#scoresKindACT').addEventListener('click', () => { scoresKind='ACT'; $('#scoresKindACT').setAttribute('aria-pressed','true'); $('#scoresKindSAT').setAttribute('aria-pressed','false'); renderScores(); });
+$('#scoresKindSAT').addEventListener('click', () => { scoresKind='SAT'; $('#scoresKindSAT').setAttribute('aria-pressed','true'); $('#scoresKindACT').setAttribute('aria-pressed','false'); renderScores(); });
+
+function init(){
+  const mode = TSIPortal.mode();
+  updateIdentity();
+  setMode('test');
+  checkResume();
+  if (mode === 'none') openIntro();
+  else if (mode === 'student' && typeof TSIPortal.refresh === 'function'){
+    TSIPortal.refresh(ok => { if (ok){ updateIdentity(); checkResume(); } });
+  }
+}
+init();
+
+})();
+</script>
+</body>
+</html>
