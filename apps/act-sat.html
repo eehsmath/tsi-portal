@@ -218,6 +218,7 @@ sup{font-size:.72em}
             (desmos.com/testing/cb-digital-sat/graphing redirects here)
    ============================================================ */
 .calcToggle{position:fixed;right:20px;bottom:20px;z-index:1550;width:56px;height:56px;border-radius:50%;border:0;background:var(--blue);color:#fff;box-shadow:0 8px 22px -6px rgba(20,38,58,.5);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.calcToggle[hidden]{display:none}
 .calcToggle svg{width:26px;height:26px}
 .calcToggle:active{transform:translateY(1px)}
 .calcToggle.active{background:#24488a}
@@ -330,7 +331,7 @@ sup{font-size:.72em}
 
 <!-- ==================== TEST ==================== -->
 <section id="test" class="hidden">
-  <a class="back" href="../index.html" id="testExitLink">&larr; Back</a>
+  <a class="back" href="#" id="testExitLink">&larr; Back</a>
   <div class="qhead">
     <p class="eyebrow" style="margin:0"><span class="moduleTag" id="moduleTag"></span> &nbsp;Question <span id="qNum" class="mono">1</span> of <span id="qTotal" class="mono">30</span></p>
     <p class="eyebrow" id="strandLabel" style="margin:0">&nbsp;</p>
@@ -372,7 +373,7 @@ sup{font-size:.72em}
     <p class="small muted" style="margin:0">Nothing is lost. Open this page again on any computer where you're signed in with your student ID, and it will start at the next question with your answers still counted.</p>
     <div class="actions" style="justify-content:flex-start;margin-top:18px">
       <button class="btn" id="pausedResumeBtn">Keep going now</button>
-      <a class="btn btn-ghost btn-sm" href="../index.html" style="text-decoration:none">Back to TSI hub</a>
+      <button class="btn btn-ghost btn-sm" id="pausedHomeBtn">Back to ACT/SAT home</button>
     </div>
   </div>
 </section>
@@ -1295,6 +1296,7 @@ function indexWithinList(){
 
 function showQuestion(){
   $('#test').classList.remove('hidden');
+  calcToggle.hidden = false;
   const list = currentList();
   const idx = indexWithinList();
   if(idx >= list.length){ finishTest(); return; }
@@ -1375,20 +1377,45 @@ $('#nextBtn').addEventListener('click', () => {
   }
 });
 
-$('#pauseBtn').addEventListener('click', () => {
+function pauseNow(){
   PortalLink.saveResume({ v:1, seed:SEED, picks:PICKS.slice(), fp:BANK_FP, at:Date.now(), examVersion:'act-sat-v1' }, true);
   $('#test').classList.add('hidden');
   $('#modBreak').classList.add('hidden');
   $('#paused').classList.remove('hidden');
   $('#pausedN').textContent = PICKS.length;
   $('#pausedTotal').textContent = totalFor(EXAM);
-});
+}
+$('#pauseBtn').addEventListener('click', pauseNow);
 $('#pausedResumeBtn').addEventListener('click', () => {
   $('#paused').classList.add('hidden');
   runReplay();
   if(EXAM==='SAT' && PICKS.length===EXAMS.SAT.adaptive.module1.len && !SESSION.m2) showModuleBreak();
   else showQuestion();
 });
+
+/* Stay inside this portal on the way out of an in-progress test: a
+   signed-in student gets the same save-and-show-paused behavior as
+   "Save & finish later" (the paused screen has its own way to actually
+   leave, back to the picker), and a guest -- who has nothing to save --
+   goes straight back to the picker. Neither ever jumps out to the TSI
+   hub; that link only lives in the picker's own switchNav. */
+function showPicker(){
+  $('#test').classList.add('hidden');
+  $('#modBreak').classList.add('hidden');
+  $('#paused').classList.add('hidden');
+  $('#results').classList.add('hidden');
+  $('#picker').classList.remove('hidden');
+  calcToggle.hidden = true;
+  calcPanel.classList.remove('show');
+  calcToggle.classList.remove('active');
+  checkResume();
+}
+$('#testExitLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  if(PortalLink && PortalLink.canResume) pauseNow();
+  else showPicker();
+});
+$('#pausedHomeBtn').addEventListener('click', showPicker);
 
 /* ---------- results ---------- */
 function finishTest(){
@@ -1507,6 +1534,7 @@ const calcIframe = document.createElement('iframe');
 calcIframe.setAttribute('title','Desmos testing calculator');
 calcIframe.setAttribute('loading','lazy');
 calcPanel.appendChild(calcIframe);
+calcToggle.hidden = true;   // shown once a test actually begins, not on the picker
 document.body.appendChild(calcToggle);
 document.body.appendChild(calcPanel);
 let calcLoaded = false;
